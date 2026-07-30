@@ -18,6 +18,10 @@ And it can hand the work over. With a connector switched on, Star writes the
 task up, dispatches it to **Claude Code** or **Codex** running on this machine,
 and tells you when it lands — while the call carries on.
 
+## Screenshot
+<img width="1718" height="1290" alt="image" src="https://github.com/user-attachments/assets/8b2dee68-2e38-4899-a538-af07edfadb16" />
+
+
 ## Run
 
 ```sh
