@@ -154,9 +154,9 @@ with what it has stored. The proxy folds those lines into the instructions and
 re-sends its own `session.update`, so the persona stays here and the memories
 stay in the browser.
 
-Two frames go the other way, authored by the proxy rather than forwarded:
-`proxy.ready` when the handshake is done, and `task.update` whenever a
-dispatched task changes state. With a connector on, the proxy also reads the
+Three frames go the other way, authored by the proxy rather than forwarded:
+`proxy.ready` when the handshake is done, `task.update` whenever a dispatched
+task changes state, and `connectors.update` when the setup does. With a connector on, the proxy also reads the
 events it is passing through, so it can answer a `dispatch_task` itself and say
 when one lands — a regex decides what is worth parsing, and the audio deltas,
 which are most of the traffic, never are.
@@ -251,7 +251,7 @@ A connector is a coding agent this server may hand a task to. Two are wired:
 | | Run as |
 |---|---|
 | **Claude Code** | `claude -p <task> --output-format json --permission-mode acceptEdits` |
-| **Codex** | `codex exec --json --sandbox workspace-write <task>` |
+| **Codex** | `codex exec --json --cd <workspace> --sandbox workspace-write <task>` |
 
 Both are off until you switch one on, because both edit files on the machine the
 server is running on. That happens in the **connectors** panel, not in a file:
@@ -307,9 +307,7 @@ summary it printed at the end.
 ### From the environment
 
 `.env` sets the defaults for a fresh machine — `CONNECTORS=claude,codex` starts
-with those on — and owns the one thing the panel deliberately cannot touch:
-
-### Per agent
+with those on — and owns the two things the panel deliberately cannot touch:
 
 | | |
 |---|---|
@@ -427,7 +425,7 @@ src/
   client/
     main.js             The wiring, and nothing else
     styles.css          The HUD around the star
-    api.js              The HTTP API, /api/connectors, /api/tasks
+    api.js              The HTTP API, as functions
     tasks.js            What the agents are working on, mirrored in the page
     history.js          Past conversations, in localStorage
     memory.js           What it remembers between calls, in localStorage
@@ -460,7 +458,7 @@ src/
   server/
     index.js            Entry point
     app.js              Middleware chain + the upgrade handler
-    api.js              /api/config
+    api.js              /api/config, /api/connectors, /api/tasks
     realtime.js         The socket proxy, and the allowlist
     persona.js          Who Star is, and the session config
     config.js           The environment, resolved once

@@ -26,5 +26,5 @@ app.listen(config.port, () => {
   console.log(`tools → ${tools.join(', ') || 'none'}`);
   console.log(connectors.length
     ? `connectors → ${connectors.join(', ')}, working in ${app.connectors.settings().cwd}`
-    : 'connectors → none yet, switch one on in the tasks panel');
+    : 'connectors → none yet, switch one on in the connectors panel');
 });
