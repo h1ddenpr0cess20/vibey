@@ -14,11 +14,14 @@ createApp(config, { tls }).listen(config.port, () => {
   if (!config.apiKey) {
     console.warn('XAI_API_KEY is not set — the mic will fail until it is.');
   }
-  const { webSearch, xSearch, mcpServers } = config.tools;
+  const { webSearch, xSearch, connectors, mcpServers } = config.tools;
   const tools = [
     webSearch && 'web_search',
     xSearch && 'x_search',
     ...mcpServers.map((s) => `mcp:${s.server_label}`),
   ].filter(Boolean);
   console.log(`tools → ${tools.join(', ') || 'none'}`);
+  if (connectors.length) {
+    console.log(`connectors → ${connectors.join(', ')}, working in ${config.connectors.cwd}`);
+  }
 });

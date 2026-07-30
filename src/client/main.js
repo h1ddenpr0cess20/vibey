@@ -131,6 +131,13 @@ session.on('user', (text) => {
 });
 session.on('tool', (label) => hud.setTool(label));
 
+/** Dispatched work outlives the call it was dispatched from, so this doesn't clear. */
+const tasks = new Map();
+session.on('task', (task) => {
+  tasks.set(task.id, task);
+  hud.setTasks([...tasks.values()]);
+});
+
 session.on('message', (message) => history.append(message));
 
 session.on('interrupted', () => star.jolt(0.9));

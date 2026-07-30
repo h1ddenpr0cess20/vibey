@@ -171,6 +171,22 @@ describe('tools', () => {
   });
 });
 
+describe('dispatched work', () => {
+  it('passes a task the proxy is running on to whoever is watching', () => {
+    const h = harness();
+    const task = { id: '1', agent: 'claude', status: 'running', task: 'add a retry' };
+    h.events.handle({ type: 'task.update', task });
+
+    assert.deepEqual(h.of('task'), [task]);
+  });
+
+  it('ignores an update with no task in it', () => {
+    const h = harness();
+    h.events.handle({ type: 'task.update' });
+    assert.deepEqual(h.emitted, []);
+  });
+});
+
 describe('the proxy handshake', () => {
   it('reports the model and voice actually used', () => {
     const h = harness();

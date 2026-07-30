@@ -79,6 +79,10 @@ export function createEventHandler({
         emit('ready', { model: event.model, voice: event.voice });
         return;
 
+      case 'task.update':
+        if (event.task) emit('task', event.task);
+        return;
+
       case 'input_audio_buffer.speech_started':
         if (playing()) emit('interrupted');
         interrupt();

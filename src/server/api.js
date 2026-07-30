@@ -19,6 +19,7 @@ export function createApiMiddleware(config) {
           x_search: config.tools.xSearch,
           code_interpreter: config.tools.code,
           memory: config.tools.memory,
+          connectors: [...config.tools.connectors],
           mcp: config.tools.mcpServers.map((s) => s.server_label),
         },
         ready: Boolean(config.apiKey),

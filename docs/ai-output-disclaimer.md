@@ -21,6 +21,8 @@ MIT License in this repository.
   MCP server put in front of it.
 - **"Outputs"**: anything the model generates or triggers — spoken audio,
   transcripts, text, or tool calls.
+- **"Connector"**: an optional link to a coding agent CLI — Claude Code or
+  Codex — which the App runs as a process on the operator's own machine.
 - **"Operator"**: whoever runs the App and supplies the `XAI_API_KEY`.
 - **"You"**: any operator, user, or organisation running or distributing the
   App.
@@ -33,7 +35,12 @@ MIT License in this repository.
   own and no opinions of its own.
 - The persona is a few paragraphs of system prompt in `src/server/persona.js`.
   It is a costume on someone else's model, not a mind. It orchestrates nothing
-  on its own — it talks about work, and any tool that acts is one you enabled.
+  on its own — every tool that acts is one you enabled.
+- With a connector switched on, the App runs a coding agent CLI on the operator's
+  machine, on a task written by the model from what it heard. That agent reads,
+  writes and runs things under its own permissions, and neither the agent nor
+  its effects are the author's. Connectors are off unless the operator names
+  one.
 - The operator supplies the API key. It stays in the Node process; the page
   never holds a long-lived credential.
 - Defects, errors, and harms attributable to model behaviour are the
@@ -130,6 +137,12 @@ Speech is not text, and some of the risk here does not exist in a chat window:
   Nothing the App says about a build has been verified by the author. Read code
   before you run it, review a change before you merge it, and do not let a
   confident-sounding answer stand in for a test.
+- **Coding agents.** A connector turns something said out loud into a task a
+  separate agent carries out on your files, without you reading it first. The
+  task is the model's summary of what it heard, transcription errors included,
+  and the agent decides for itself how to do it. Run it on a working tree you
+  can throw away, keep it under version control, and read the diff. The App has
+  no auth of its own: anyone who can reach the page can dispatch work.
 - **Spoken technical detail.** Versions, flags, paths and identifiers are the
   things a voice model is most likely to get subtly wrong and a listener least
   likely to catch. Check them in writing before acting on them.

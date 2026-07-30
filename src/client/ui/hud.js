@@ -37,6 +37,7 @@ export function createHud(root = document) {
   const captionEl = root.querySelector('#caption');
   const youEl = root.querySelector('#you');
   const toolEl = root.querySelector('#tool');
+  const tasksEl = root.querySelector('#tasks');
 
   return {
     setState(state) {
@@ -71,13 +72,22 @@ export function createHud(root = document) {
       toolEl.classList.toggle('visible', Boolean(label));
     },
 
+    /** Only what is still running: a finished task is Star's to report, not a chip's. */
+    setTasks(tasks) {
+      const live = tasks.filter((task) => task.status === 'running');
+      tasksEl.textContent = live.length
+        ? `${live.map((task) => `${task.agent} ${task.id}`).join(' · ')} · running`
+        : '';
+      tasksEl.classList.toggle('visible', live.length > 0);
+    },
+
     showError(message) {
       captionEl.textContent = message;
       captionEl.classList.add('visible', 'error');
     },
 
-    showTools({ web_search: web, x_search: x, code_interpreter: code, memory, mcp }) {
-      const names = [web && 'web', x && 'X', code && 'code', memory && 'memory', ...mcp]
+    showTools({ web_search: web, x_search: x, code_interpreter: code, memory, connectors = [], mcp }) {
+      const names = [web && 'web', x && 'X', code && 'code', memory && 'memory', ...connectors, ...mcp]
         .filter(Boolean);
       const el = root.querySelector('#tools');
       el.textContent = names.length ? `tools: ${names.join(' · ')}` : '';

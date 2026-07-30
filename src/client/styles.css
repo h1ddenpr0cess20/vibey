@@ -73,6 +73,18 @@ three-d-stage {
 }
 #tool.visible { opacity: .75; }
 
+#tasks {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 66px);
+  left: calc(env(safe-area-inset-left) + var(--gutter));
+  z-index: 5;
+  color: var(--listening);
+  opacity: 0;
+  transition: opacity .3s;
+  pointer-events: none;
+}
+#tasks.visible { opacity: .7; }
+
 #hud {
   position: fixed;
   left: 0;

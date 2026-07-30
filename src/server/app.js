@@ -36,6 +36,8 @@ export function createApp(config = loadConfig(), { root = DIST, tls = null } = {
   const server = tls ? createSecureServer(tls, handle) : createServer(handle);
   const realtime = createRealtimeProxy(config);
 
+  server.on('close', () => realtime.close());
+
   server.on('upgrade', (req, socket, head) => {
     if (req.url.split('?')[0] !== REALTIME_PATH) return socket.destroy();
     realtime.handleUpgrade(req, socket, head);

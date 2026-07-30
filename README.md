@@ -14,11 +14,9 @@ soften, and the core slides around inside the shell it is lit through.
 It can search the web and X, run code in xAI's sandbox, and call remote MCP
 servers. It also remembers what you tell it to, between calls.
 
-**This is the first draft.** Star talks about the work; it does not yet drive a
-coding platform. The persona, the state machine and the transport seam are the
-parts that are finished — dispatching real work to a real agent is what comes
-next, and it goes in behind the same `session/` boundary everything else already
-sits behind.
+And it can hand the work over. With a connector switched on, Star writes the
+task up, dispatches it to **Claude Code** or **Codex** running on this machine,
+and tells you when it lands — while the call carries on.
 
 ## Run
 
@@ -65,6 +63,11 @@ Both `npm run dev` and `npm start` read `.env`.
 | `XAI_X_SEARCH` | `true` | |
 | `XAI_CODE_INTERPRETER` | `true` | Python in xAI's sandbox |
 | `MEMORY` | `true` | The `remember` and `forget` tools, and the memory block in the prompt |
+| `CONNECTORS` | — | `claude`, `codex`, or both. Off unless named — see [Connectors](#connectors) |
+| `CONNECTOR_CWD` | where the server started | The workspace the agents work in |
+| `CONNECTOR_TIMEOUT` | `900` | Seconds one task may run before it is stopped |
+| `CONNECTOR_LIMIT` | `3` | Tasks running at once |
+| `CONNECTOR_ANNOUNCE` | `true` | Star says so when a task settles, rather than waiting to be asked |
 | `XAI_MCP_SERVERS` | — | JSON array of remote MCP servers, or put it in `mcp.json` |
 | `PORT` | `5173` | |
 | `SSL_KEY`, `SSL_CERT` | — | Paths to a real certificate; `npm start` then serves HTTPS |
@@ -99,6 +102,11 @@ docker run --rm -p 5173:5173 -e XAI_API_KEY=xai-... h1ddenpr0cess20/vibey
 Images go to Docker Hub on every push to `main` (`latest`) and on `v*` tags
 (`1.2.3`, `1.2`), built for `linux/amd64` and `linux/arm64`. Configuration is the
 same set of variables as `.env` — pass them with `-e` or `--env-file .env`.
+
+Connectors are not usable in the published image: the agent CLIs aren't in it,
+and neither is your workspace. Running them from a container means an image of
+your own with the CLI installed, the repo mounted at `CONNECTOR_CWD`, and
+whatever each CLI reads its credentials from mounted too.
 
 The container serves HTTP on `PORT` (5173 by default) and expects TLS to be
 terminated in front of it. To serve TLS from the container instead, mount a
@@ -145,6 +153,13 @@ One frame type never reaches xAI at all: `session.memory`, which the page sends
 with what it has stored. The proxy folds those lines into the instructions and
 re-sends its own `session.update`, so the persona stays here and the memories
 stay in the browser.
+
+Two frames go the other way, authored by the proxy rather than forwarded:
+`proxy.ready` when the handshake is done, and `task.update` whenever a
+dispatched task changes state. With a connector on, the proxy also reads the
+events it is passing through, so it can answer a `dispatch_task` itself and say
+when one lands — a regex decides what is worth parsing, and the audio deltas,
+which are most of the traffic, never are.
 
 ## Audio
 
@@ -220,12 +235,80 @@ Remote MCP servers go in `XAI_MCP_SERVERS` as a JSON array, or in `mcp.json`
 ```
 
 Credentials there never leave the Node process — `/api/config` reports tool
-labels only. This is also the seam a coding platform arrives through: an MCP
-server that can open a branch or dispatch a task is a config entry, not a code
-change.
+labels only. An MCP server that can open a branch or file a ticket is a config
+entry rather than a code change; a coding agent that has to be spawned, watched
+and killed is not, which is what the connectors below are.
 
-`remember` and `forget` are the two tools that run here rather than at xAI —
-see below.
+`remember` and `forget` run in the page. `dispatch_task`, `check_task` and
+`cancel_task` run in the proxy. Everything else runs at xAI.
+
+## Connectors
+
+A connector is a coding agent this server may hand a task to. Two are wired:
+
+| | Run as |
+|---|---|
+| **Claude Code** | `claude -p <task> --output-format json --permission-mode acceptEdits` |
+| **Codex** | `codex exec --json --sandbox workspace-write <task>` |
+
+Both are off until you ask for one, because both edit files on the machine the
+server is running on:
+
+```sh
+CONNECTORS=claude,codex
+CONNECTOR_CWD=/path/to/the/repo
+```
+
+Each CLI has to be installed and already logged in — Vibey holds no credential
+for either, and hands them none. The `XAI_API_KEY` is stripped out of the
+environment the agents inherit; it is ours, and they have no use for it.
+
+Say what you want built. Star writes the task up, reads it back, and dispatches
+it on a yes. `dispatch_task` returns a number as soon as the process is spawned
+— the agent keeps working, the call carries on, and the chip under the status
+line says what is still in flight. When it settles, Star says so, in a sentence,
+without being asked. `check_task` is the model asking where one stands;
+`cancel_task` stops one, and Star will tell you that what it already wrote is
+still written.
+
+The tasks belong to the server, not to the call. Changing voice mid-session
+redials, and the new call opens knowing what was dispatched before it — running
+or finished — because that recap goes into the session prompt.
+
+None of it touches the page. The proxy answers those three tools itself: the
+browser never learns what command was run, and only ever sees a status. The
+model doesn't see the command line either, or the agent's raw output beyond the
+summary it printed at the end.
+
+### Per agent
+
+| | |
+|---|---|
+| `CLAUDE_COMMAND`, `CODEX_COMMAND` | A whole command line, so the CLI can be wrapped — `npx claude`, `docker exec -w /work dev codex`. The flags above are appended to it. |
+| `CLAUDE_MODEL`, `CODEX_MODEL` | Passed as `--model`. |
+| `CLAUDE_PERMISSION_MODE` | `plan`, `acceptEdits` (default), `bypassPermissions`. |
+| `CODEX_SANDBOX` | `read-only`, `workspace-write` (default), `danger-full-access`. |
+| `CLAUDE_ARGS`, `CODEX_ARGS` | Anything else, split like a shell would. |
+| `CLAUDE_CWD`, `CODEX_CWD` | A different workspace for that one agent. |
+
+The defaults are the modes that let an agent finish a task inside the workspace
+and nothing wider. Both CLIs have a mode that turns the rest of the guardrails
+off; neither is the default here, and a voice interface is a poor place to be
+casual about which one is on.
+
+Each CLI's machine-readable output has already changed shape at least once, so
+the parsers take what they know — Claude's `result`, Codex's last
+`agent_message` — and fall back to the tail of what was actually printed rather
+than failing a task over a renamed field. A non-zero exit is a failure, and the
+last of stderr rides back with it.
+
+Star is told, in the prompt, that this edits real files: read the task back
+before dispatching, get a plain yes for anything that doesn't come back, and
+never claim work happened that it hasn't checked on.
+
+**Anyone who can reach the page can spend your agent's tokens on your files.**
+Vibey has no accounts and no auth — that's fine for `localhost`, and it is the
+whole story before you put it on a LAN with connectors on.
 
 ## Memory
 
@@ -344,6 +427,11 @@ src/
     persona.js          Who Star is, and the session config
     config.js           The environment, resolved once
     static.js           Hosting for dist/ — production only
+    connectors/         The coding agents, and the work handed to them
+      index.js            The three tools, and the tasks behind them
+      agents.js           Claude Code and Codex, as command lines and parsers
+      tasks.js            Spawn, watch, time out, kill
+      tools.js            What the model is told it can dispatch
 docs/                   Policies: the output disclaimer, and what this is not
 test/                   node:test, against a stub xAI socket
 .github/workflows/      CI (lint, tests, build smoke test) and the Docker publish
@@ -391,6 +479,7 @@ and emits:
 'busy'         whether a response is in flight
 'ready'        { model, voice } the proxy actually used
 'memory'       the result of a remember/forget the model just called
+'task'         a dispatched task changed state — { id, agent, status, … }
 'done'         { usage }
 'error'        { message }
 ```

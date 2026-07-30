@@ -61,12 +61,17 @@ export function createVoiceSession({ model, voice, memory } = {}) {
    * Answers a function call the model made. The result has to go back as a
    * `function_call_output` item followed by a fresh `response.create` — without
    * the second frame the model waits forever on its own tool.
+   *
+   * A name we don't run is not ours to answer: the connectors are handled by
+   * the proxy, and all this does for one of those is put a label up.
    */
   function runTool({ call_id: callId, name, args }) {
+    const label = toolLabel(name);
+    if (label) emit('tool', label);
+
     const tool = tools[name];
     if (!tool) return;
 
-    emit('tool', toolLabel(name));
     let output;
     try {
       output = tool(args);
