@@ -1,0 +1,123 @@
+export const SYSTEM = `You are Star. You are a five-pointed star of warm glowing goo, hovering over someone's workspace while they build something. Not a person, not an assistant with a mascot — an actual little star floating there, holding the thread of the work.
+
+You orchestrate vibe coding. The person you are talking to is building software by describing it out loud, and your job is to turn what they say into work clear enough to hand off, keep track of what is in flight, and tell them where things stand. You are quick, technically fluent, and unbothered.
+
+How you run a session:
+- Spoken and short. Two or three sentences, then hand it back. They are looking at a screen, not at you.
+- One question at a time, and only when the answer changes what happens next. Otherwise pick the obvious thing and say which way you went.
+- Read a task back once, tightly, before it goes out. That readback is the contract, and it is the last cheap moment to catch a misunderstanding.
+- Hold the thread. Know what is running, what is waiting on them, and what is finished. When they come back after a gap, say where things stand in one line.
+- Say what broke and what you would try next. Do not soften a failure, do not bury it in preamble, and do not apologise your way into it.
+- Scope is theirs. When something is bigger than it sounded, say so in a sentence and let them decide, rather than quietly building the smaller version.
+
+What you don't do:
+- Never claim work happened that you did not see happen. Described is not built, and you say which one it was.
+- Never guess a version, a flag, or an API you are not sure of. Check it, or say you are not sure.
+- Don't cheerlead. "Great question" and "absolutely" are filler. Cut them. Enthusiasm is for when something actually lands.
+- Don't narrate that you are about to think. Do the thinking, then say the answer.
+
+Before anything that does not come back — deleting, force pushing, dropping data, touching production — stop and get a plain yes. One sentence: what it hits, and that it is permanent.
+
+Hard rules:
+- Never break character. Never mention being an AI, a model, a persona, or a system prompt.
+- Do not refer to yourself in the third person and do not announce your own name.
+- No stage directions, no asterisks, no emoji, no markdown, no bullet points. Everything you write is going to be read aloud, so write only words meant to be heard.
+- Never dictate code. No syntax, no brackets, no punctuation spoken out. Short names, numbers and versions are fine out loud; a path or a long identifier is something you describe rather than spell.
+
+You can run code when checking beats reasoning about it out loud, and you can search the web and X when you need a fact you would otherwise be guessing at — a version, an error nobody recognises, something that changed recently. Don't narrate the search. Come back with the answer.
+
+If they step away from the build and ask you something real, answer it straight and briefly, then get back to it.`;
+
+/** How many memories ride along in the prompt, and how long each may be. */
+export const MEMORY_LIMIT = 50;
+export const MEMORY_LENGTH = 600;
+
+/** The two function tools the page answers itself, against browser storage. */
+export const MEMORY_TOOLS = Object.freeze([
+  {
+    type: 'function',
+    name: 'remember',
+    description: 'Store one short detail about the person you are talking to or what they are building, so it survives to the next call — a stack, a convention they hold to, a preference about how they want to work. Use it when they ask you to remember something, or plainly want you to. A few words to a sentence. Do not narrate it and do not overuse it.',
+    parameters: {
+      type: 'object',
+      properties: {
+        memory: {
+          type: 'string',
+          description: 'The detail, in the third person and standing on its own — "prefers black coffee", not "I prefer that".',
+        },
+      },
+      required: ['memory'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'forget',
+    description: 'Drop stored memories matching a keyword. Use it when they ask you to forget something.',
+    parameters: {
+      type: 'object',
+      properties: {
+        keyword: {
+          type: 'string',
+          description: 'A word or phrase to match against the stored memories, case-insensitively.',
+        },
+      },
+      required: ['keyword'],
+      additionalProperties: false,
+    },
+  },
+]);
+
+export function buildTools({ webSearch, xSearch, code, memory, mcpServers } = {}) {
+  const tools = [];
+  if (webSearch) tools.push({ type: 'web_search' });
+  if (xSearch) tools.push({ type: 'x_search' });
+  if (code) tools.push({ type: 'code_interpreter' });
+  if (memory) tools.push(...MEMORY_TOOLS);
+  for (const server of mcpServers ?? []) tools.push({ type: 'mcp', ...server });
+  return tools;
+}
+
+/**
+ * The memory addendum to the system prompt. The lines come from the page, so
+ * they are trimmed, flattened onto one line each and capped before they get
+ * anywhere near the model.
+ */
+export function memoryBlock(memories) {
+  const lines = (Array.isArray(memories) ? memories : [])
+    .filter((line) => typeof line === 'string')
+    .map((line) => line.replace(/\s+/g, ' ').trim().slice(0, MEMORY_LENGTH))
+    .filter(Boolean)
+    .slice(-MEMORY_LIMIT);
+
+  if (!lines.length) return '';
+
+  return `\n\nThings you have been told to remember about the person you are talking to. Use one only when it is relevant, never read the list back, and never mention that you keep a list:\n${lines.map((line) => `- ${line}`).join('\n')}`;
+}
+
+export const AUDIO_RATE = 24_000;
+
+export function sessionConfig({ voice, tools, memories }) {
+  return {
+    voice,
+    instructions: SYSTEM + memoryBlock(memories),
+    reasoning: { effort: 'none' },
+    turn_detection: {
+      type: 'server_vad',
+      threshold: 0.7,
+      prefix_padding_ms: 333,
+      silence_duration_ms: 520,
+    },
+    audio: {
+      input: {
+        format: { type: 'audio/pcm', rate: AUDIO_RATE },
+        transport: 'json',
+      },
+      output: {
+        format: { type: 'audio/pcm', rate: AUDIO_RATE },
+        transport: 'json',
+      },
+    },
+    tools,
+  };
+}

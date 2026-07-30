@@ -1,0 +1,243 @@
+import { createAudio, createCapture, createPlayer } from './audio.js';
+import { encodePCM } from './codec.js';
+import { createEmitter } from './emitter.js';
+import { createEventHandler } from './events.js';
+import { amplitude, createAnalyser, follow } from './metering.js';
+import { connect } from './socket.js';
+import { createTools, toolLabel } from './tools.js';
+
+const MIC_CONSTRAINTS = {
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    channelCount: 1,
+  },
+};
+
+function micUnavailable() {
+  if (navigator.mediaDevices?.getUserMedia) return null;
+  return globalThis.isSecureContext === false
+    ? 'the microphone needs a secure page, and this one is plain http:// — serve it over https (npm run dev:lan) or open it on localhost'
+    : 'this browser won’t hand over a microphone — try opening the page in Safari or Chrome';
+}
+
+export function createVoiceSession({ model, voice, memory } = {}) {
+  const { on, emit } = createEmitter();
+  const messages = [];
+  const tools = memory ? createTools({ memory }) : {};
+
+  let currentModel = model;
+  let currentVoice = voice;
+
+  let call = null;
+  let audio = null;
+  let capture = null;
+  let player = null;
+  let micStream = null;
+  let micAnalyser = null;
+
+  let state = 'idle';
+  let muted = false;
+  let connecting = false;
+  let generation = 0;
+  let picked = 0;
+  let dialledPick = 0;
+
+  let frame = 0;
+  let level = 0;
+
+  function setState(next) {
+    if (state === next) return;
+    state = next;
+    emit('state', next);
+  }
+
+  function fail(message) {
+    emit('error', { message });
+  }
+
+  /**
+   * Answers a function call the model made. The result has to go back as a
+   * `function_call_output` item followed by a fresh `response.create` — without
+   * the second frame the model waits forever on its own tool.
+   */
+  function runTool({ call_id: callId, name, args }) {
+    const tool = tools[name];
+    if (!tool) return;
+
+    emit('tool', toolLabel(name));
+    let output;
+    try {
+      output = tool(args);
+    } catch (err) {
+      output = { ok: false, error: err?.message ?? String(err) };
+    }
+
+    call?.send({
+      type: 'conversation.item.create',
+      item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(output) },
+    });
+    call?.send({ type: 'response.create' });
+    emit('memory', output);
+  }
+
+  const events = createEventHandler({
+    setState,
+    emit,
+    fail,
+    messages,
+    play: (samples) => player?.enqueue(samples),
+    flushAudio: () => player?.flush(),
+    playing: () => player?.playing ?? false,
+    onFunctionCall: runTool,
+  });
+
+  function tick() {
+    frame = requestAnimationFrame(tick);
+
+    if (state === 'speaking' && !player.playing) setState('listening');
+
+    const analyser = state === 'speaking' ? audio.outAnalyser : state === 'listening' ? micAnalyser : null;
+    level = follow(level, analyser ? amplitude(analyser) : 0);
+    emit('level', level);
+  }
+
+  async function start() {
+    if (call || connecting) return;
+    connecting = true;
+    const mine = ++generation;
+    const abandoned = () => mine !== generation;
+
+    try {
+      const unavailable = micUnavailable();
+      if (unavailable) throw new Error(unavailable);
+      micStream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+      if (abandoned()) return stop();
+
+      audio = await createAudio();
+      if (abandoned()) return stop();
+
+      micAnalyser = createAnalyser(audio.ctx, audio.ctx.createMediaStreamSource(micStream));
+      player = createPlayer(audio.ctx, audio.output);
+
+      dialledPick = picked;
+      call = await connect({
+        voice: currentVoice,
+        model: currentModel,
+        memories: memory?.lines() ?? [],
+        onEvent: events.handle,
+        onClose: (reason) => {
+          if (!call) return;
+          if (reason) fail(reason);
+          stop();
+        },
+      });
+      if (abandoned()) return stop();
+
+      capture = await createCapture(audio.ctx, micStream, (samples) => {
+        if (muted) return;
+        call?.send({ type: 'input_audio_buffer.append', audio: encodePCM(samples) });
+      });
+      if (abandoned()) return stop();
+
+      frame = requestAnimationFrame(tick);
+      setState('listening');
+    } catch (err) {
+      fail(err?.message ?? String(err));
+      stop();
+    } finally {
+      connecting = false;
+    }
+  }
+
+  function stop() {
+    generation++;
+    const closing = call;
+    call = null;
+
+    cancelAnimationFrame(frame);
+    frame = 0;
+    level = 0;
+    emit('level', 0);
+
+    player?.flush();
+    capture?.close();
+    closing?.close();
+    micStream?.getTracks().forEach((track) => track.stop());
+    audio?.ctx.close();
+
+    call = capture = player = micStream = audio = micAnalyser = null;
+    muted = false;
+    events.reset();
+    setState('idle');
+  }
+
+  function send(text) {
+    const content = text.trim();
+    if (!content || !call?.open) return;
+    messages.push({ role: 'user', content });
+    emit('message', { role: 'user', content });
+    call.send({
+      type: 'conversation.item.create',
+      item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: content }] },
+    });
+    call.send({ type: 'response.create' });
+    setState('thinking');
+  }
+
+  return {
+    on,
+    start,
+    stop,
+    send,
+    get messages() {
+      return messages;
+    },
+    /** Hands the current memories to a call already in progress. */
+    syncMemory() {
+      if (!memory || !call?.open) return false;
+      return call.send({ type: 'session.memory', memories: memory.lines() });
+    },
+    get connected() {
+      return call?.open ?? false;
+    },
+    get busy() {
+      return events.responding;
+    },
+    get state() {
+      return state;
+    },
+    get muted() {
+      return muted;
+    },
+    set muted(next) {
+      muted = Boolean(next);
+      micStream?.getAudioTracks().forEach((track) => {
+        track.enabled = !muted;
+      });
+    },
+    get model() {
+      return currentModel;
+    },
+    set model(next) {
+      currentModel = next;
+      picked++;
+    },
+    get voice() {
+      return currentVoice;
+    },
+    set voice(next) {
+      currentVoice = next;
+      picked++;
+    },
+    get stale() {
+      return !!call && picked !== dialledPick;
+    },
+    cancel() {
+      if (!call?.open) return;
+      if (events.responding) call.send({ type: 'response.cancel' });
+      events.interrupt();
+    },
+  };
+}

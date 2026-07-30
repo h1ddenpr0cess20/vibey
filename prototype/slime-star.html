@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Slime Star — AI assistant avatar</title>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+  }
+}
+</script>
+
+
+
+
+
+
+<style>
+  html, body { margin: 0; height: 100%; background: #07080c; }
+  three-d-stage:not(:defined) { visibility: hidden; }
+  three-d-stage { display: block; width: 100vw; height: 100vh; }
+  #state {
+    position: fixed; left: 24px; bottom: 22px; z-index: 5;
+    display: flex; gap: 8px; font: 500 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .12em; text-transform: uppercase;
+  }
+  #state button {
+    appearance: none; cursor: pointer; padding: 9px 14px; border-radius: 999px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
+    color: rgba(255,255,255,.55); font: inherit; transition: color .2s, background .2s, border-color .2s;
+  }
+  #state button:hover { color: rgba(255,255,255,.9); background: rgba(255,255,255,.1); }
+  #state button[aria-pressed="true"] { color: #07080c; background: #eef1f5; border-color: #eef1f5; }
+</style>
+</head>
+<body>
+
+<three-d-stage name="slime-star" background="#07080c"></three-d-stage>
+<div id="state">
+  <button data-mode="idle" aria-pressed="true">idle</button>
+  <button data-mode="listening" aria-pressed="false">listening</button>
+  <button data-mode="thinking" aria-pressed="false">thinking</button>
+  <button data-mode="speaking" aria-pressed="false">speaking</button>
+</div>
+<script src="./three-d-stage.js"></script>
+<script type="module">
+const stage = document.querySelector('three-d-stage');
+const { THREE } = await stage.ready;
+
+/* --- soft studio environment so the transmissive shell has something to
+       refract; PMREM keeps roughness blur physically sane --- */
+try {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 32;
+  const g = c.getContext('2d').createLinearGradient(0, 0, 0, 32);
+  g.addColorStop(0, '#dfe6ff'); g.addColorStop(0.45, '#8f9bb8');
+  g.addColorStop(0.5, '#3a4152'); g.addColorStop(1, '#0d0f15');
+  const ctx = c.getContext('2d'); ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 32);
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.beginPath();
+  ctx.ellipse(20, 8, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(160,210,255,0.8)'; ctx.beginPath();
+  ctx.ellipse(48, 12, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.Texture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  const pmrem = new THREE.PMREMGenerator(stage._renderer);
+  stage._scene.environment = pmrem.fromEquirectangular(tex).texture;
+  pmrem.dispose(); tex.dispose();
+} catch (e) { /* environment is a nicety, not a requirement */ }
+
+const orb = new THREE.Group();
+orb.name = 'slime_star';
+
+/* palette the star drifts through */
+const PALETTE = ['#ffd166', '#ffa62b', '#ff7a2f', '#f2452e', '#ff9c4a'].map(h => new THREE.Color(h));
+const paletteAt = (t, out) => {
+  const f = ((t % PALETTE.length) + PALETTE.length) % PALETTE.length;
+  const i = Math.floor(f);
+  return out.copy(PALETTE[i]).lerp(PALETTE[(i + 1) % PALETTE.length], f - i);
+};
+
+/* ---- star profile: 5-point polygon radius, blurred into soft goo tips ---- */
+const POINTS = 5, RIN = 0.48, LUTN = 1024, FLAT = 0.46;
+const rawStar = (t) => {
+  const seg = Math.PI / POINTS;
+  const a = ((t % (2 * seg)) + 2 * seg) % (2 * seg);
+  const r1 = a <= seg ? 1 : RIN, r2 = a <= seg ? RIN : 1;
+  const t1 = a <= seg ? 0 : seg, t2 = a <= seg ? seg : 2 * seg;
+  return (r1 * r2 * Math.sin(t2 - t1)) / (r1 * Math.sin(a - t1) + r2 * Math.sin(t2 - a));
+};
+const LUT = new Float32Array(LUTN);
+{
+  const raw = new Float32Array(LUTN);
+  for (let i = 0; i < LUTN; i++) raw[i] = rawStar((i / LUTN) * Math.PI * 2);
+  const K = 30; // triangular blur rounds the tips and the notches
+  let max = 0;
+  for (let i = 0; i < LUTN; i++) {
+    let s = 0, wsum = 0;
+    for (let j = -K; j <= K; j++) {
+      const w = 1 - Math.abs(j) / (K + 1);
+      s += raw[(i + j + LUTN) % LUTN] * w; wsum += w;
+    }
+    LUT[i] = s / wsum;
+    if (LUT[i] > max) max = LUT[i];
+  }
+  for (let i = 0; i < LUTN; i++) LUT[i] /= max;
+}
+const starR = (t) => {
+  const f = (t / (Math.PI * 2)) * LUTN;
+  const i = Math.floor(f), k = f - i;
+  const a = LUT[((i % LUTN) + LUTN) % LUTN], b = LUT[(((i + 1) % LUTN) + LUTN) % LUTN];
+  return a + (b - a) * k;
+};
+/* map a unit sphere direction onto the puffy star body */
+const toStar = (nx, ny, nz, out) => {
+  const w = Math.sqrt(nx * nx + ny * ny);
+  const s = starR(Math.atan2(nx, ny));          // atan2(x, y) puts a point straight up
+  const radial = 1 + (s - 1) * Math.pow(w, 0.72);
+  const tip = (s - RIN) / (1 - RIN);
+  const zs = FLAT * (1 - 0.62 * Math.pow(w, 2.4) * tip);
+  return out.set(nx * radial, ny * radial, nz * zs);
+};
+
+/* smooth organic displacement: sum of directional sines (cheap, seamless) */
+const LOBES = [];
+for (let i = 0; i < 5; i++) {
+  const a = i * 2.399963, r = Math.sqrt(1 - Math.pow(1 - 2 * (i + 0.5) / 5, 2));
+  LOBES.push({
+    dir: new THREE.Vector3(Math.cos(a) * r, 1 - 2 * (i + 0.5) / 5, Math.sin(a) * r).normalize(),
+    freq: 1.0 + i * 0.42,
+    speed: 0.45 + i * 0.19,
+    amp: 0.115 / (1 + i * 0.6),
+    phase: i * 1.7,
+  });
+}
+
+const v = new THREE.Vector3();
+const tmpColor = new THREE.Color();
+
+const shellMat = new THREE.MeshPhysicalMaterial({
+  name: 'slime_shell',
+  color: new THREE.Color('#ffb03a'),
+  transparent: true,
+  opacity: 0.78,
+  transmission: 0.9,
+  thickness: 0.35,
+  ior: 1.3,
+  roughness: 0.08,
+  metalness: 0,
+  clearcoat: 1,
+  clearcoatRoughness: 0.06,
+  iridescence: 0.35,
+  iridescenceIOR: 1.35,
+  attenuationDistance: 2.4,
+  attenuationColor: new THREE.Color('#ffd8a1'),
+  sheen: 0.5,
+  sheenRoughness: 0.5,
+  sheenColor: new THREE.Color('#ffffff'),
+});
+const shellGeo = new THREE.SphereGeometry(1, 144, 88);
+const shellDirs = shellGeo.attributes.position.array.slice();
+const basePos = new Float32Array(shellDirs.length);
+for (let i = 0; i < shellDirs.length; i += 3) {
+  toStar(shellDirs[i], shellDirs[i + 1], shellDirs[i + 2], v);
+  basePos[i] = v.x; basePos[i + 1] = v.y; basePos[i + 2] = v.z;
+}
+shellGeo.attributes.position.array.set(basePos);
+shellGeo.attributes.position.needsUpdate = true;
+shellGeo.computeVertexNormals();
+const shell = new THREE.Mesh(shellGeo, shellMat);
+shell.name = 'shell';
+orb.add(shell);
+
+const coreMat = new THREE.MeshStandardMaterial({
+  name: 'slime_core',
+  color: new THREE.Color('#3a1405'),
+  emissive: new THREE.Color('#ffa62b'),
+  emissiveIntensity: 3.5,
+  roughness: 0.35,
+  metalness: 0,
+  transparent: true,
+  opacity: 0.95,
+});
+const coreGeo = new THREE.SphereGeometry(1, 72, 46);
+const coreDirs = coreGeo.attributes.position.array.slice();
+const coreBase = new Float32Array(coreDirs.length);
+for (let i = 0; i < coreDirs.length; i += 3) {
+  toStar(coreDirs[i], coreDirs[i + 1], coreDirs[i + 2], v).multiplyScalar(0.54);
+  coreBase[i] = v.x; coreBase[i + 1] = v.y; coreBase[i + 2] = v.z;
+}
+coreGeo.attributes.position.array.set(coreBase);
+coreGeo.attributes.position.needsUpdate = true;
+coreGeo.computeVertexNormals();
+const core = new THREE.Mesh(coreGeo, coreMat);
+core.name = 'core';
+orb.add(core);
+
+/* glow bound to the shell's own geometry — a rim bloom, not a second body */
+const glowMat = new THREE.ShaderMaterial({
+  name: 'slime_glow',
+  uniforms: { uColor: { value: new THREE.Color('#ffa62b') }, uStrength: { value: 0.5 } },
+  vertexShader: `
+    varying vec3 vN; varying vec3 vP;
+    void main() {
+      vN = normalize(normalMatrix * normal);
+      vec4 mv = modelViewMatrix * vec4(position * 1.06, 1.0);
+      vP = mv.xyz;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    uniform vec3 uColor; uniform float uStrength;
+    varying vec3 vN; varying vec3 vP;
+    void main() {
+      float f = 1.0 - abs(dot(normalize(vN), normalize(-vP)));
+      float rim = pow(f, 1.55) * (1.0 - pow(f, 12.0));
+      float body = pow(f, 0.4) * 0.16;
+      float a = (rim + body) * uStrength;
+      gl_FragColor = vec4(uColor * a * 1.15, a);
+    }`,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  side: THREE.FrontSide,
+  depthWrite: false,
+});
+const glow = new THREE.Mesh(shellGeo, glowMat);
+glow.name = 'glow';
+orb.add(glow);
+
+/* soft ambient bloom around the silhouette (depth-tested, so the body sits in it) */
+const haloTex = ((core) => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  if (core) {
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.14, 'rgba(255,255,255,0.55)');
+    grd.addColorStop(0.34, 'rgba(255,255,255,0.17)');
+    grd.addColorStop(0.66, 'rgba(255,255,255,0.035)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+  }
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})(true);
+const haloWideTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grd.addColorStop(0, 'rgba(255,255,255,0.42)');
+  grd.addColorStop(0.3, 'rgba(255,255,255,0.16)');
+  grd.addColorStop(0.6, 'rgba(255,255,255,0.05)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const haloMat = new THREE.SpriteMaterial({
+  map: haloTex, color: new THREE.Color('#ffa62b'), transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.85,
+});
+const halo = new THREE.Sprite(haloMat);
+halo.name = 'halo';
+halo.scale.setScalar(4.4);
+orb.add(halo);
+
+/* wide atmospheric wash — depth-untested so it reads as light in the air */
+const haloWideMat = new THREE.SpriteMaterial({
+  map: haloWideTex, color: new THREE.Color('#ff7a2f'), transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, opacity: 0.3,
+});
+const haloWide = new THREE.Sprite(haloWideMat);
+haloWide.name = 'halo_wide';
+haloWide.scale.setScalar(9);
+haloWide.renderOrder = -1;
+orb.add(haloWide);
+
+const MODES = {
+  idle:      { wobble: 0.36, speed: 0.80, hue: 0.030, breathe: 0.016, spin: 0.035, glow: 3.6, halo: 0.14 },
+  listening: { wobble: 0.20, speed: 1.20, hue: 0.014, breathe: 0.036, spin: 0.020, glow: 5.0, halo: 0.20 },
+  thinking:  { wobble: 0.55, speed: 1.95, hue: 0.190, breathe: 0.012, spin: 0.260, glow: 9.5, halo: 0.42 },
+  speaking:  { wobble: 0.48, speed: 2.45, hue: 0.075, breathe: 0.050, spin: 0.070, glow: 6.2, halo: 0.28 },
+};
+let mode = MODES.idle, m = { ...MODES.idle };
+document.querySelectorAll('#state button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#state button').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+    mode = MODES[btn.dataset.mode];
+  });
+});
+
+let hue = 0, clock = new THREE.Clock(), phase = 0;
+
+shell.onBeforeRender = () => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  for (const k in m) m[k] += (mode[k] - m[k]) * Math.min(1, dt * 3.2);
+  phase += dt * m.speed;
+  hue += dt * m.hue;
+
+  const pos = shellGeo.attributes.position;
+  const arr = pos.array;
+  const breathe = 1 + Math.sin(phase * 1.5) * m.breathe;
+  for (let i = 0; i < arr.length; i += 3) {
+    v.set(shellDirs[i], shellDirs[i + 1], shellDirs[i + 2]);
+    let d = 0;
+    for (const l of LOBES) {
+      d += l.amp * Math.sin(l.freq * v.dot(l.dir) * 2.35 + phase * l.speed * 2.2 + l.phase);
+    }
+    const s = (1 + d * m.wobble) * breathe;
+    arr[i] = basePos[i] * s; arr[i + 1] = basePos[i + 1] * s; arr[i + 2] = basePos[i + 2] * s;
+  }
+  pos.needsUpdate = true;
+  shellGeo.computeVertexNormals();
+
+  const cpos = coreGeo.attributes.position, ca = cpos.array;
+  for (let i = 0; i < ca.length; i += 3) {
+    v.set(coreDirs[i], coreDirs[i + 1], coreDirs[i + 2]);
+    let d = 0;
+    for (let j = 0; j < 3; j++) {
+      const l = LOBES[j];
+      d += l.amp * 1.5 * Math.sin(l.freq * v.dot(l.dir) * 2.6 - phase * l.speed * 3 + l.phase);
+    }
+    const s = 1 + d * m.wobble;
+    ca[i] = coreBase[i] * s; ca[i + 1] = coreBase[i + 1] * s; ca[i + 2] = coreBase[i + 2] * s;
+  }
+  cpos.needsUpdate = true;
+  coreGeo.computeVertexNormals();
+
+  paletteAt(hue, tmpColor);
+  shellMat.color.copy(tmpColor);
+  shellMat.attenuationColor.copy(tmpColor).lerp(new THREE.Color('#fff2dc'), 0.35);
+  coreMat.emissive.copy(tmpColor);
+  coreMat.emissiveIntensity = m.glow;
+  glowMat.uniforms.uColor.value.copy(tmpColor);
+  glowMat.uniforms.uStrength.value = m.halo * 8.5 * (0.94 + Math.sin(phase * 2.1) * 0.06);
+  haloMat.color.copy(tmpColor);
+  haloMat.opacity = 0.42 + m.halo * 2.6 * (0.96 + Math.sin(phase * 1.7) * 0.04);
+  halo.scale.setScalar(4.9 + m.halo * 1.6 + Math.sin(phase * 1.3) * 0.12);
+  haloWideMat.color.copy(tmpColor);
+  haloWideMat.opacity = 0.12 + m.halo * 1.1;
+  haloWide.scale.setScalar(8 + m.halo * 6);
+
+  core.position.set(Math.sin(phase * 0.7) * 0.02, Math.sin(phase * 0.9) * 0.018, Math.cos(phase * 0.6) * 0.01);
+  core.rotation.z = Math.sin(phase * 0.3) * 0.12;
+  orb.rotation.z += dt * m.spin * 0.35;
+  orb.rotation.y = Math.sin(phase * 0.2) * 0.12;
+};
+
+stage.setObject(orb);
+/* frame the star face-on — the halo sprite would otherwise inflate the auto-fit */
+if (stage._camera && stage._controls) {
+  const cam = stage._camera;
+  const dist = (1.2 / Math.tan((cam.fov * Math.PI) / 360)) * 1.3;
+  cam.position.set(0.24, 0.15, 1).normalize().multiplyScalar(dist);
+  cam.near = dist / 100; cam.far = dist * 100; cam.updateProjectionMatrix();
+  stage._controls.target.set(0, 0, 0);
+  stage._controls.update();
+}
+glow.castShadow = false; glow.receiveShadow = false;
+halo.castShadow = false; halo.receiveShadow = false;
+haloWide.castShadow = false; haloWide.receiveShadow = false;
+</script>
+
+
+</body></html>

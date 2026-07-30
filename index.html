@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#07080c">
+<meta name="description" content="A voice orchestrator for vibe coding, rendered as a five-pointed star of glowing goo. You describe the work out loud and it holds the thread. Driven by an xAI Grok speech-to-speech session.">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Vibey — a star that runs the build</title>
+</head>
+<body>
+<three-d-stage name="star" background="#07080c"></three-d-stage>
+
+<div id="status" class="chip" data-state="idle">idle</div>
+<div id="tool" class="chip"></div>
+
+<div id="tabs">
+  <button id="memory-toggle" class="chip" type="button" aria-expanded="false"
+          aria-controls="memory">memory</button>
+  <button id="history-toggle" class="chip" type="button" aria-expanded="false"
+          aria-controls="history">log</button>
+</div>
+
+<div id="hud">
+  <div id="you"></div>
+  <div id="caption" aria-live="polite"></div>
+
+  <form id="composer">
+    <button id="mic" type="button" aria-pressed="false" aria-label="Start talking">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+        <rect x="5.4" y="1.4" width="4.2" height="7.6" rx="2.1" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M3 7.2a4.5 4.5 0 0 0 9 0M7.5 11.7v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <path class="slash" d="M2.6 12.4 12.4 2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    </button>
+
+    <input id="prompt" type="text" autocomplete="off" autocapitalize="sentences" enterkeyhint="send"
+           disabled placeholder="Tap the mic. Say what you’re building." aria-label="Message">
+
+    <button id="send" type="submit" aria-label="Send">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+        <path d="M7.5 12.5V2.5M7.5 2.5L3 7M7.5 2.5L12 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
+    <div id="options">
+      <select id="model" class="chip" aria-label="Model"><option>loading…</option></select>
+      <select id="voice" class="chip" aria-label="Voice"><option>voice</option></select>
+    </div>
+  </form>
+
+  <div id="tools" class="chip"></div>
+</div>
+
+<section id="history" hidden aria-label="Conversation history">
+  <header id="history-head">
+    <span class="chip">history</span>
+    <button id="history-new" class="chip" type="button">new</button>
+    <button id="history-clear" class="chip" type="button">clear</button>
+    <button id="history-close" class="chip" type="button" aria-label="Close history">close</button>
+  </header>
+  <div id="history-log"></div>
+</section>
+
+<section id="memory" hidden aria-label="What it remembers">
+  <header id="memory-head">
+    <span class="chip">memory</span>
+    <button id="memory-switch" class="chip" type="button" aria-pressed="true"
+            aria-label="Switch memory on or off">on</button>
+    <button id="memory-clear" class="chip" type="button">clear</button>
+    <button id="memory-close" class="chip" type="button" aria-label="Close memory">close</button>
+  </header>
+  <ul id="memory-list"></ul>
+  <form id="memory-add">
+    <input id="memory-input" type="text" autocomplete="off" maxlength="600"
+           placeholder="Something for it to remember" aria-label="New memory">
+    <button class="chip" type="submit">add</button>
+  </form>
+</section>
+
+<script type="module" src="/src/client/main.js"></script>
+</body>
+</html>
