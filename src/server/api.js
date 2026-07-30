@@ -26,6 +26,9 @@ function readJSON(req) {
 }
 
 export function createApiMiddleware(config, connectors) {
+  /** Wiring this without the registry is how the panel ends up empty. */
+  if (!connectors) throw new Error('createApiMiddleware needs the connectors registry');
+
   return async function api(req, res, next) {
     const path = req.url.split('?')[0];
     if (!path.startsWith('/api/')) return next();
@@ -41,7 +44,7 @@ export function createApiMiddleware(config, connectors) {
           x_search: config.tools.xSearch,
           code_interpreter: config.tools.code,
           memory: config.tools.memory,
-          connectors: connectors?.agents ?? [],
+          connectors: connectors.agents,
           mcp: config.tools.mcpServers.map((s) => s.server_label),
         },
         ready: Boolean(config.apiKey),
@@ -54,7 +57,7 @@ export function createApiMiddleware(config, connectors) {
      * the running server and saved, without an edit to a file or a restart.
      */
     if (path === '/api/connectors' && req.method === 'GET') {
-      return sendJSON(res, 200, connectors?.settings() ?? { agents: [] });
+      return sendJSON(res, 200, connectors.settings());
     }
 
     if (path === '/api/connectors' && (req.method === 'PUT' || req.method === 'POST')) {
@@ -64,7 +67,7 @@ export function createApiMiddleware(config, connectors) {
       } catch (err) {
         return sendJSON(res, 400, { ok: false, error: err.message });
       }
-      const result = connectors?.configure(patch) ?? { ok: false, error: 'connectors are unavailable' };
+      const result = connectors.configure(patch);
       return sendJSON(res, result.ok ? 200 : 400, result);
     }
 
@@ -75,13 +78,12 @@ export function createApiMiddleware(config, connectors) {
      * gets read back to you first. Stopping one is the exception.
      */
     if (path === '/api/tasks' && req.method === 'GET') {
-      return sendJSON(res, 200, { agents: connectors?.agents ?? [], tasks: connectors?.tasks() ?? [] });
+      return sendJSON(res, 200, { agents: connectors.agents, tasks: connectors.tasks() });
     }
 
     const stopping = /^\/api\/tasks\/([^/]+)\/stop$/.exec(path);
     if (stopping && req.method === 'POST') {
-      const result = connectors?.run('cancel_task', { id: decodeURIComponent(stopping[1]) })
-        ?? { ok: false, error: 'no coding agent is connected' };
+      const result = connectors.run('cancel_task', { id: decodeURIComponent(stopping[1]) });
       return sendJSON(res, result.ok ? 200 : 409, result);
     }
 

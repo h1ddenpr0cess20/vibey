@@ -3,6 +3,7 @@ import { defineConfig, loadEnv } from 'vite';
 
 import { createApiMiddleware } from './src/server/api.js';
 import { loadConfig } from './src/server/config.js';
+import { createConnectors } from './src/server/connectors/index.js';
 import { REALTIME_PATH } from './src/server/app.js';
 import { createRealtimeProxy } from './src/server/realtime.js';
 import { CERT_DIR } from './src/server/tls.js';
@@ -12,9 +13,14 @@ function icyApi(env) {
   return {
     name: 'vibey-api',
     configureServer(server) {
-      server.middlewares.use(createApiMiddleware(config));
+      /** One registry for both, exactly as createApp does it — dev is not a
+       *  second wiring of the same thing. */
+      const connectors = createConnectors(config);
 
-      const realtime = createRealtimeProxy(config);
+      server.middlewares.use(createApiMiddleware(config, connectors));
+
+      const realtime = createRealtimeProxy(config, connectors);
+      server.httpServer?.on('close', () => connectors.close());
       server.httpServer?.on('upgrade', (req, socket, head) => {
         if (req.url.split('?')[0] !== REALTIME_PATH) return;
         realtime.handleUpgrade(req, socket, head);
