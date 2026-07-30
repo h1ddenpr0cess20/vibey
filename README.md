@@ -58,7 +58,7 @@ Both `npm run dev` and `npm start` read `.env`.
 | Variable | Default | Role |
 |---|---|---|
 | `XAI_API_KEY` | — | Required. Stays in the Node process. |
-| `XAI_VOICE` | `leo` | Any of the 26 voices xAI publishes — the full list is in `.env.example`. Any other voice id is honoured and added to the picker. |
+| `XAI_VOICE` | `sirius` | Any of the 26 voices xAI publishes — the full list is in `.env.example`. Any other voice id is honoured and added to the picker. |
 | `XAI_MODEL` | `grok-voice-latest` | Also `grok-voice-think-fast-1.0` |
 | `XAI_REALTIME_URL` | xAI | Points the proxy at a gateway or a stub |
 | `XAI_WEB_SEARCH` | `true` | |

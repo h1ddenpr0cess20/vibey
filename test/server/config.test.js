@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { KNOWN_VOICES, loadConfig } from '../../src/server/config.js';
+import { DEFAULT_VOICE, KNOWN_VOICES, loadConfig } from '../../src/server/config.js';
 import { buildTools } from '../../src/server/persona.js';
 
 describe('loadConfig', () => {
-  it('defaults to leo, and offers the whole published roster', () => {
+  it('defaults to sirius, and offers the whole published roster', () => {
     const config = loadConfig({});
-    assert.equal(config.defaultVoice, 'leo');
+    assert.equal(DEFAULT_VOICE, 'sirius');
+    assert.equal(config.defaultVoice, DEFAULT_VOICE);
+    assert.ok(KNOWN_VOICES.includes(DEFAULT_VOICE), 'the default is a published voice');
     assert.deepEqual(config.voices, [...KNOWN_VOICES]);
   });
 

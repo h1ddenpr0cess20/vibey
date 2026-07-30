@@ -8,8 +8,10 @@ function spring(s, k, c, dt, to = 0) {
   s.p += s.v * dt;
 }
 
-const FRAME = { y: 0.06, halfW: 1.5, halfH: 1.5 };
-const MARGIN = 1.25;
+/** How much of the frame is left empty around the star, and how far the goo is
+ *  allowed to swell past its resting silhouette before the fit stops caring. */
+const MARGIN = 1.22;
+const SWELL = 1.12;
 
 export function createStar({ stage, THREE }) {
   buildEnvironment({ stage, THREE });
@@ -271,25 +273,82 @@ export function createStar({ stage, THREE }) {
   let dir = new THREE.Vector3(0.24, 0.15, 1).normalize();
   stage._controls.addEventListener('start', () => { dir = null; });
 
-  stage._controls.target.set(0, FRAME.y, 0);
+  /**
+   * The resting silhouette, padded for the widest swell. A five-point star with
+   * a tip up is not symmetric about its own origin — the tip reaches 1 and the
+   * bottom two only -0.82 — so framing on the origin sits it visibly high. The
+   * halos are left out on purpose: they are light, and light may run off frame.
+   */
+  const rest = new THREE.Box3().setFromArray(shellBase);
+  rest.min.multiplyScalar(SWELL);
+  rest.max.multiplyScalar(SWELL);
 
+  const corners = [];
+  for (let i = 0; i < 8; i++) {
+    corners.push(new THREE.Vector3(
+      i & 1 ? rest.max.x : rest.min.x,
+      i & 2 ? rest.max.y : rest.min.y,
+      i & 4 ? rest.max.z : rest.min.z));
+  }
+
+  const focus = new THREE.Vector3();
+  const sphere = new THREE.Sphere();
+  const ndc = new THREE.Vector3();
+  const right = new THREE.Vector3();
+  const up = new THREE.Vector3();
+  const fwd = new THREE.Vector3();
+
+  /**
+   * Fit and centre in one pass each: place the camera, project the corners,
+   * then correct the distance and the focus from where they actually landed.
+   * Measuring beats predicting here — an oblique view of a flat body throws
+   * the silhouette off the axis it is pointed down, and three passes lands
+   * inside a pixel at any aspect.
+   */
   const reframe = () => {
     const camera = stage._camera;
-    const w = stage.clientWidth || 1;
-    const h = stage.clientHeight || 1;
-    const aspect = w / h;
+    const aspect = (stage.clientWidth || 1) / (stage.clientHeight || 1);
+    camera.aspect = aspect;
 
-    const dist = (Math.max(FRAME.halfH, FRAME.halfW / aspect)
-      / Math.tan((camera.fov * Math.PI) / 360)) * MARGIN;
-
-    const focus = stage._controls.target;
-    const view = dir ? dir.clone() : camera.position.clone().sub(focus).normalize();
+    const view = dir ? dir.clone()
+      : camera.position.clone().sub(stage._controls.target).normalize();
     if (view.lengthSq() === 0) view.set(0.24, 0.15, 1).normalize();
+
+    const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
+    rest.getCenter(focus);
+    let dist = (rest.getBoundingSphere(sphere).radius / tanHalf) * MARGIN;
+
+    for (let pass = 0; pass < 3; pass++) {
+      camera.position.copy(focus).addScaledVector(view, dist);
+      camera.near = Math.max(dist / 100, 0.01);
+      camera.far = dist * 100;
+      camera.updateProjectionMatrix();
+      camera.lookAt(focus);
+      camera.updateMatrixWorld(true);
+
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const c of corners) {
+        ndc.copy(c).project(camera);
+        if (ndc.x < minX) minX = ndc.x;
+        if (ndc.x > maxX) maxX = ndc.x;
+        if (ndc.y < minY) minY = ndc.y;
+        if (ndc.y > maxY) maxY = ndc.y;
+      }
+
+      // Walk the focus by however far off centre the silhouette came out, in
+      // the camera's own basis, then rescale the distance to the fit we want.
+      camera.matrixWorld.extractBasis(right, up, fwd);
+      focus
+        .addScaledVector(right, ((minX + maxX) / 2) * tanHalf * aspect * dist)
+        .addScaledVector(up, ((minY + maxY) / 2) * tanHalf * dist);
+      dist *= (Math.max(maxX - minX, maxY - minY) / 2) * MARGIN;
+    }
+
     camera.position.copy(focus).addScaledVector(view, dist);
     camera.near = Math.max(dist / 100, 0.01);
     camera.far = dist * 100;
-    camera.aspect = aspect;
     camera.updateProjectionMatrix();
+    stage._controls.target.copy(focus);
     stage._controls.update();
   };
 

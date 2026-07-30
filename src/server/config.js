@@ -7,6 +7,10 @@ export const KNOWN_VOICES = Object.freeze([
   'lux', 'cosmo', 'sirius', 'altair', 'helios',
 ]);
 
+/** The one Star opens on. Named rather than positional, so the picker can keep
+ *  xAI's own ordering without that deciding who answers. */
+export const DEFAULT_VOICE = 'sirius';
+
 export const KNOWN_MODELS = Object.freeze(['grok-voice-latest', 'grok-voice-think-fast-1.0']);
 
 function flag(value, fallback) {
@@ -40,7 +44,7 @@ function readMcpFile(path) {
 }
 
 export function loadConfig(env = process.env) {
-  const defaultVoice = env.XAI_VOICE || KNOWN_VOICES[0];
+  const defaultVoice = env.XAI_VOICE || DEFAULT_VOICE;
   const defaultModel = env.XAI_MODEL || KNOWN_MODELS[0];
 
   return {
