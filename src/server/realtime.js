@@ -28,6 +28,16 @@ export const MEMORY_EVENT = 'session.memory';
 export const TASK_EVENT = 'task.update';
 
 /**
+ * The other frame from the page that never leaves this process: which agent the
+ * person picked in the composer. It is a default, not an order — the model can
+ * still name one — and it lands mid-call, without a redial.
+ */
+export const AGENT_EVENT = 'session.agent';
+
+/** Down to the page: which agents are on, after someone changed it in the panel. */
+export const SETTINGS_EVENT = 'connectors.update';
+
+/**
  * Which frames from xAI are worth parsing on the way past. Everything else is
  * forwarded as bytes — audio deltas are most of the traffic and the largest,
  * and none of this is worth a JSON.parse of every one of them.
@@ -86,11 +96,13 @@ export function sanitize(event) {
   return event;
 }
 
-export function createRealtimeProxy(config) {
+/**
+ * The connectors are made outside a call and shared with the API, because a
+ * task has to survive a redial — and the panel has to be able to see one when
+ * there is no call up at all.
+ */
+export function createRealtimeProxy(config, connectors = createConnectors(config)) {
   const wss = new WebSocketServer({ noServer: true });
-
-  /** Made once, not per call: a task has to survive a redial to be worth having. */
-  const connectors = createConnectors(config);
 
   wss.on('connection', (client, req) => {
     const params = new URL(req.url, 'http://localhost').searchParams;
@@ -117,15 +129,15 @@ export function createRealtimeProxy(config) {
       headers: { authorization: `Bearer ${config.apiKey}` },
     });
 
-    const tools = buildTools(config.tools);
     let pending = [];
     let memories = [];
 
+    /** Built per send, not per call: the panel can switch an agent on mid-call. */
     const update = () => JSON.stringify({
       type: 'session.update',
       session: sessionConfig({
         voice,
-        tools,
+        tools: buildTools({ ...config.tools, connectors: connectors.agents }),
         memories,
         agents: connectors.agents,
         tasks: connectors.tasks(),
@@ -147,6 +159,7 @@ export function createRealtimeProxy(config) {
     const notes = [];
     let responding = false;
     let talking = false;
+    let preferred = connectors.agents[0] ?? null;
 
     /**
      * A note waits for a gap. Cutting into a response — or across the person
@@ -177,7 +190,7 @@ export function createRealtimeProxy(config) {
         args = {};
       }
 
-      const output = connectors.run(name, args);
+      const output = connectors.run(name, args, { agent: preferred });
       sendUp({
         type: 'conversation.item.create',
         item: { type: 'function_call_output', call_id: id, output: JSON.stringify(output) },
@@ -207,9 +220,16 @@ export function createRealtimeProxy(config) {
 
     const unwatch = connectors.watch((task) => {
       tellPage({ type: TASK_EVENT, task });
-      if (task.status === 'running' || !config.connectors?.announce) return;
+      if (task.status === 'running' || !connectors.announce) return;
       notes.push(taskNote(task));
       flushNotes();
+    });
+
+    /** The agents changed under the call: re-declare the tools it may use. */
+    const unlisten = connectors.onSettings(() => {
+      if (!connectors.agents.includes(preferred)) preferred = connectors.agents[0] ?? null;
+      if (upstream.readyState === WebSocket.OPEN) upstream.send(update());
+      tellPage({ type: SETTINGS_EVENT, agents: connectors.agents });
     });
 
     upstream.on('open', () => {
@@ -248,6 +268,11 @@ export function createRealtimeProxy(config) {
         return;
       }
 
+      if (incoming?.type === AGENT_EVENT) {
+        if (connectors.agents.includes(incoming.agent)) preferred = incoming.agent;
+        return;
+      }
+
       if (incoming?.type === MEMORY_EVENT) {
         if (!config.tools.memory) return;
         memories = Array.isArray(incoming.memories) ? incoming.memories : [];
@@ -266,12 +291,14 @@ export function createRealtimeProxy(config) {
     client.on('close', () => {
       pending = [];
       unwatch();
+      unlisten();
       if (upstream.readyState === WebSocket.OPEN) upstream.close(1000);
       else upstream.terminate();
     });
 
     client.on('error', () => {
       unwatch();
+      unlisten();
       upstream.terminate();
     });
   });
@@ -280,9 +307,6 @@ export function createRealtimeProxy(config) {
     handleUpgrade(req, socket, head) {
       wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
     },
-    close: () => {
-      connectors.close();
-      wss.close();
-    },
+    close: () => wss.close(),
   };
 }

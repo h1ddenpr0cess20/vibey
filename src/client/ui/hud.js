@@ -37,7 +37,6 @@ export function createHud(root = document) {
   const captionEl = root.querySelector('#caption');
   const youEl = root.querySelector('#you');
   const toolEl = root.querySelector('#tool');
-  const tasksEl = root.querySelector('#tasks');
 
   return {
     setState(state) {
@@ -70,15 +69,6 @@ export function createHud(root = document) {
     setTool(label) {
       toolEl.textContent = label ?? '';
       toolEl.classList.toggle('visible', Boolean(label));
-    },
-
-    /** Only what is still running: a finished task is Star's to report, not a chip's. */
-    setTasks(tasks) {
-      const live = tasks.filter((task) => task.status === 'running');
-      tasksEl.textContent = live.length
-        ? `${live.map((task) => `${task.agent} ${task.id}`).join(' · ')} · running`
-        : '';
-      tasksEl.classList.toggle('visible', live.length > 0);
     },
 
     showError(message) {

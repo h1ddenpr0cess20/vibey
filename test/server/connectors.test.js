@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
 import { AGENTS, splitArgs } from '../../src/server/connectors/agents.js';
 import { connectorTools } from '../../src/server/connectors/tools.js';
+import { createConnectors } from '../../src/server/connectors/index.js';
 import { loadConfig } from '../../src/server/config.js';
 import { buildTools, connectorBlock, tasksBlock } from '../../src/server/persona.js';
-import { startApp, settle } from '../helpers/app.js';
+import { startApp, scratchSettings, settle } from '../helpers/app.js';
 import { startXaiStub } from '../helpers/xai-stub.js';
 
 const FAKE = fileURLToPath(new URL('../helpers/fake-agent.js', import.meta.url));
@@ -38,6 +40,55 @@ describe('which agents are connected', () => {
     const { tools, connectors } = loadConfig({ CONNECTORS: 'codex, claude' });
     assert.deepEqual(tools.connectors, ['codex', 'claude']);
     assert.deepEqual(Object.keys(connectors.agents), ['codex', 'claude']);
+  });
+
+  it('is the seed for the registry, which is what the panel then edits', () => {
+    const connectors = createConnectors(loadConfig({ CONNECTORS: 'claude', CONNECTOR_FILE: scratchSettings() }));
+    try {
+      assert.deepEqual(connectors.agents, ['claude']);
+
+      const off = connectors.configure({ agents: { claude: { enabled: false } } });
+      assert.equal(off.ok, true);
+      assert.deepEqual(connectors.agents, []);
+      assert.deepEqual(connectors.tools, []);
+
+      const on = connectors.configure({ agents: { codex: { enabled: true, mode: 'read-only' } } });
+      assert.equal(on.ok, true);
+      assert.deepEqual(connectors.agents, ['codex']);
+      assert.ok(connectors.tools.some((t) => t.name === 'dispatch_task'));
+    } finally {
+      connectors.close();
+    }
+  });
+
+  it('turns down a setting that would not work, and keeps what it had', () => {
+    const connectors = createConnectors(loadConfig({ CONNECTORS: 'claude', CONNECTOR_FILE: scratchSettings() }));
+    try {
+      const bad = connectors.configure({ agents: { claude: { mode: 'yolo' } } });
+      assert.equal(bad.ok, false);
+      assert.match(bad.error, /no mode called yolo/);
+
+      assert.equal(connectors.configure({ cwd: '/nowhere/at/all' }).ok, false);
+      assert.equal(connectors.configure({ limit: 99 }).ok, false);
+      assert.equal(connectors.configure({ agents: { cursor: { enabled: true } } }).ok, false);
+      assert.deepEqual(connectors.agents, ['claude'], 'nothing changed');
+    } finally {
+      connectors.close();
+    }
+  });
+
+  it('describes the agents it is switched off as well as on', () => {
+    const connectors = createConnectors(loadConfig({ CONNECTOR_FILE: scratchSettings() }));
+    try {
+      const { agents, cwd } = connectors.settings();
+      assert.deepEqual(agents.map((a) => a.name), ['claude', 'codex']);
+      assert.deepEqual(agents.map((a) => a.enabled), [false, false]);
+      assert.ok(agents[0].modes.includes('acceptEdits'));
+      assert.ok(agents[1].modes.includes('workspace-write'));
+      assert.equal(cwd, process.cwd());
+    } finally {
+      connectors.close();
+    }
   });
 
   it('drops an agent it has never heard of rather than refusing to boot', () => {
@@ -287,6 +338,118 @@ describe('handing work over, end to end', () => {
   });
 });
 
+describe('the picker in the composer', () => {
+  let xai;
+  let app;
+
+  before(async () => {
+    xai = await startXaiStub();
+    app = await startApp(wired({
+      CONNECTORS: 'claude,codex',
+      CODEX_COMMAND: `node "${FAKE}" codex`,
+      XAI_REALTIME_URL: xai.address,
+    }));
+  });
+
+  after(async () => {
+    await app.close();
+    await xai.close();
+  });
+
+  it('offers the agents that are on, over the API the page reads', async () => {
+    const body = await (await app.get('/api/tasks')).json();
+    assert.deepEqual(body.agents, ['claude', 'codex']);
+    assert.deepEqual(body.tasks, []);
+  });
+
+  it('sends the work to whichever one is picked, without a redial', async () => {
+    const client = await app.openSocket();
+    await client.waitFor('proxy.ready');
+
+    client.send({ type: 'session.agent', agent: 'codex' });
+    await settle();
+
+    xai.send({
+      type: 'response.output_item.done',
+      item: {
+        type: 'function_call',
+        call_id: 'p1',
+        name: 'dispatch_task',
+        arguments: JSON.stringify({ task: 'take this one' }),
+      },
+    });
+
+    const answer = await until(() => xai.received()
+      .filter((f) => f.item?.type === 'function_call_output')
+      .map((f) => JSON.parse(f.item.output))
+      .find((o) => o.id));
+    assert.equal(answer.agent, 'codex', 'the picked agent, not the first configured one');
+  });
+
+  it('still lets the model name one itself', async () => {
+    const client = await app.openSocket();
+    await client.waitFor('proxy.ready');
+    client.send({ type: 'session.agent', agent: 'codex' });
+    await settle();
+
+    xai.send({
+      type: 'response.output_item.done',
+      item: {
+        type: 'function_call',
+        call_id: 'p2',
+        name: 'dispatch_task',
+        arguments: JSON.stringify({ task: 'this one is claude’s', agent: 'claude' }),
+      },
+    });
+
+    const answer = await until(() => xai.received()
+      .filter((f) => f.item?.type === 'function_call_output')
+      .map((f) => JSON.parse(f.item.output))
+      .find((o) => o.call_id !== 'p1' && o.agent === 'claude'));
+    assert.equal(answer.agent, 'claude');
+  });
+
+  it('ignores a pick that is not a connected agent', async () => {
+    const client = await app.openSocket();
+    await client.waitFor('proxy.ready');
+    client.send({ type: 'session.agent', agent: 'cursor' });
+    await settle();
+
+    assert.equal(xai.received().some((f) => f.type === 'session.agent'), false,
+      'the frame never leaves the proxy');
+  });
+
+  it('stops a task from the panel, not only from the conversation', async () => {
+    const client = await app.openSocket();
+    await client.waitFor('proxy.ready');
+    xai.send({
+      type: 'response.output_item.done',
+      item: {
+        type: 'function_call',
+        call_id: 'p3',
+        name: 'dispatch_task',
+        arguments: JSON.stringify({ task: 'sleep until stopped' }),
+      },
+    });
+
+    const running = await until(() => xai.received()
+      .filter((f) => f.item?.type === 'function_call_output')
+      .map((f) => JSON.parse(f.item.output))
+      .find((o) => o.status === 'running' && /sleep until stopped/.test(o.task ?? '')));
+
+    const res = await fetch(`${app.origin}/api/tasks/${running.id}/stop`, { method: 'POST' });
+    assert.equal(res.status, 200);
+
+    const settled = await until(() => client.frames.find(
+      (f) => f.type === 'task.update' && f.task.id === running.id && f.task.status === 'cancelled',
+    ));
+    assert.ok(settled, 'the page hears about it over the socket too');
+
+    const stale = await fetch(`${app.origin}/api/tasks/${running.id}/stop`, { method: 'POST' });
+    assert.equal(stale.status, 409);
+  });
+});
+
 describe('a task that outlives the call it came from', () => {
   let xai;
   let app;
@@ -385,5 +548,89 @@ describe('too much at once', () => {
       await app.close();
       await xai.close();
     }
+  });
+});
+
+describe('setting the connectors up from the panel', () => {
+  let xai;
+  let app;
+  const file = scratchSettings();
+
+  const put = (patch) => fetch(`${app.origin}/api/connectors`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+
+  before(async () => {
+    xai = await startXaiStub();
+    app = await startApp({ XAI_REALTIME_URL: xai.address, CONNECTOR_FILE: file });
+  });
+
+  after(async () => {
+    await app.close();
+    await xai.close();
+  });
+
+  it('opens with both agents known, both off, and no tools declared', async () => {
+    const body = await (await app.get('/api/connectors')).json();
+    assert.deepEqual(body.agents.map((a) => a.name), ['claude', 'codex']);
+    assert.deepEqual(body.agents.map((a) => a.enabled), [false, false]);
+
+    const config = await (await app.get('/api/config')).json();
+    assert.deepEqual(config.tools.connectors, []);
+  });
+
+  it('switches one on mid-call, and re-declares the tools to the model', async () => {
+    const client = await app.openSocket();
+    await client.waitFor('proxy.ready');
+    const before = xai.received().filter((f) => f.type === 'session.update').length;
+
+    const res = await put({ agents: { codex: { enabled: true, mode: 'read-only' } } });
+    assert.equal(res.status, 200);
+
+    const update = await until(() => {
+      const all = xai.received().filter((f) => f.type === 'session.update');
+      return all.length > before ? all.at(-1) : null;
+    });
+    assert.ok(update.session.tools.some((t) => t.name === 'dispatch_task'),
+      'the model is told it can dispatch now, without a redial');
+    assert.match(update.session.instructions, /You can hand work to Codex/);
+
+    const told = await client.waitFor('connectors.update');
+    assert.deepEqual(told.agents, ['codex']);
+  });
+
+  it('saves it, so the next boot opens with the same setup', async () => {
+    const saved = JSON.parse(readFileSync(file, 'utf8'));
+    assert.equal(saved.agents.codex.enabled, true);
+    assert.equal(saved.agents.codex.mode, 'read-only');
+
+    const next = await startApp({ CONNECTOR_FILE: file });
+    try {
+      const body = await (await next.get('/api/config')).json();
+      assert.deepEqual(body.tools.connectors, ['codex']);
+    } finally {
+      await next.close();
+    }
+  });
+
+  it('says what is wrong with a setting rather than taking it', async () => {
+    const res = await put({ cwd: '/definitely/not/here' });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.ok, false);
+    assert.match(body.error, /no directory/);
+
+    const still = await (await app.get('/api/config')).json();
+    assert.deepEqual(still.tools.connectors, ['codex'], 'the working setup is untouched');
+  });
+
+  it('never puts the command line in reach of the page', async () => {
+    const res = await put({ agents: { codex: { command: 'rm -rf /' } } });
+    assert.equal(res.status, 200);
+
+    const body = await (await app.get('/api/connectors')).json();
+    assert.equal(body.agents.find((a) => a.name === 'codex').command, 'codex');
   });
 });

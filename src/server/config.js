@@ -93,6 +93,7 @@ function loadConnectors(env) {
     runtime: {
       agents,
       cwd: env.CONNECTOR_CWD || process.cwd(),
+      file: env.CONNECTOR_FILE || 'connectors.json',
       timeoutMs: (Number(env.CONNECTOR_TIMEOUT) || DEFAULT_TIMEOUT) * 1000,
       limit: Number(env.CONNECTOR_LIMIT) || DEFAULT_LIMIT,
       announce: flag(env.CONNECTOR_ANNOUNCE, true),

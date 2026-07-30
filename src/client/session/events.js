@@ -79,6 +79,10 @@ export function createEventHandler({
         emit('ready', { model: event.model, voice: event.voice });
         return;
 
+      case 'connectors.update':
+        emit('agents', event.agents ?? []);
+        return;
+
       case 'task.update':
         if (event.task) emit('task', event.task);
         return;

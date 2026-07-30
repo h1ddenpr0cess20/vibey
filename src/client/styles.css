@@ -73,18 +73,6 @@ three-d-stage {
 }
 #tool.visible { opacity: .75; }
 
-#tasks {
-  position: fixed;
-  top: calc(env(safe-area-inset-top) + 66px);
-  left: calc(env(safe-area-inset-left) + var(--gutter));
-  z-index: 5;
-  color: var(--listening);
-  opacity: 0;
-  transition: opacity .3s;
-  pointer-events: none;
-}
-#tasks.visible { opacity: .7; }
-
 #hud {
   position: fixed;
   left: 0;
@@ -285,7 +273,8 @@ three-d-stage {
 #tabs button:hover { color: rgba(245, 233, 220, .9); border-color: rgba(245, 233, 220, .28); }
 
 #history,
-#memory {
+#memory,
+#connectors {
   position: fixed;
   z-index: 6;
   left: 50%;
@@ -301,10 +290,12 @@ three-d-stage {
   border: 1px solid rgba(245, 233, 220, .14);
 }
 #history[hidden],
-#memory[hidden] { display: none; }
+#memory[hidden],
+#connectors[hidden] { display: none; }
 
 #history-head,
-#memory-head {
+#memory-head,
+#connectors-head {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -313,9 +304,12 @@ three-d-stage {
   border-bottom: 1px solid rgba(245, 233, 220, .1);
 }
 #history-head .chip:first-child,
-#memory-head .chip:first-child { flex: 1; }
+#memory-head .chip:first-child,
+#connectors-head .chip:first-child { flex: 1; }
 #history-head button,
 #memory-head button,
+#connectors-head button,
+#connectors .task button,
 #memory-add button {
   appearance: none;
   cursor: pointer;
@@ -328,9 +322,12 @@ three-d-stage {
 }
 #history-head button:hover,
 #memory-head button:hover,
+#connectors-head button:hover,
+#connectors .task button:hover,
 #memory-add button:hover { background: rgba(245, 233, 220, .14); color: var(--ink); }
 #history-head button:disabled,
-#memory-head button:disabled { opacity: .35; cursor: default; }
+#memory-head button:disabled,
+#connectors .task button:disabled { opacity: .35; cursor: default; }
 #history-head button:disabled:hover,
 #memory-head button:disabled:hover { background: rgba(245, 233, 220, .06); color: rgba(245, 233, 220, .6); }
 #history-head #history-new {
@@ -351,13 +348,15 @@ three-d-stage {
 #history-clear.armed,
 #memory-clear.armed { color: var(--error); }
 #history :focus-visible,
-#memory :focus-visible {
+#memory :focus-visible,
+#connectors :focus-visible {
   outline: 2px solid rgba(245, 233, 220, .55);
   outline-offset: 2px;
 }
 
 #history-log,
-#memory-list {
+#memory-list,
+#connectors-body {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -394,7 +393,8 @@ three-d-stage {
 #history .turn[data-role="assistant"] .who { color: var(--thinking); }
 
 #history .empty,
-#memory .empty {
+#memory .empty,
+#connectors .empty {
   margin: 18px 0;
   font: 400 14px/1.6 var(--sans);
   color: rgba(245, 233, 220, .34);
@@ -433,6 +433,138 @@ three-d-stage {
   transition: background .2s, color .2s;
 }
 .memory-item button:hover { background: rgba(245, 233, 220, .08); color: var(--error); }
+
+
+#connectors-setup { padding: 14px 0 4px; }
+#connectors .agent {
+  padding: 14px 0;
+  border-top: 1px solid rgba(245, 233, 220, .08);
+}
+#connectors .agent[data-on="false"] { opacity: .55; }
+#connectors .agent > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: rgba(245, 233, 220, .38);
+}
+#connectors .agent-name { color: rgba(245, 233, 220, .82); }
+#connectors .agent > header .meta { margin-left: auto; color: rgba(245, 233, 220, .22); }
+#connectors .switch {
+  appearance: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(245, 233, 220, .16);
+  background: none;
+  color: rgba(245, 233, 220, .34);
+  transition: background .2s, color .2s, border-color .2s;
+}
+#connectors .switch[aria-pressed="true"] {
+  background: var(--listening);
+  border-color: var(--listening);
+  color: var(--void);
+}
+#connectors .agent-warn:not(:empty) {
+  display: block;
+  margin-top: 8px;
+  font: 400 12px/1.5 var(--sans);
+  color: var(--error);
+}
+
+#connectors .agent-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+#connectors .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: rgba(245, 233, 220, .3);
+}
+#connectors .field input,
+#connectors .field select {
+  appearance: none;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 4px;
+  background: rgba(245, 233, 220, .05);
+  border: 1px solid rgba(245, 233, 220, .14);
+  color: var(--ink);
+  font: 400 13px/1.3 var(--sans);
+}
+#connectors .field select {
+  cursor: pointer;
+  font: 600 11px/1.3 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+#connectors .field select option { background: #171426; color: var(--ink); }
+#connectors .field input::placeholder { color: rgba(245, 233, 220, .26); }
+#connectors .field input:focus,
+#connectors .field select:focus { outline: none; border-color: rgba(245, 233, 220, .4); }
+
+#connectors-note {
+  margin: 12px 0 0;
+  color: rgba(245, 233, 220, .38);
+  opacity: 0;
+  transition: opacity .2s;
+}
+#connectors-note.visible { opacity: 1; }
+#connectors-note.error { color: var(--error); }
+
+#connectors-tasks { margin-top: 18px; }
+#connectors .section {
+  display: block;
+  padding-top: 14px;
+  border-top: 1px solid rgba(245, 233, 220, .14);
+  color: rgba(245, 233, 220, .3);
+}
+#connectors-save:not(:disabled) { color: var(--listening); }
+
+#connectors-toggle.live { color: var(--listening); border-color: rgba(255, 209, 102, .4); }
+#connectors-head .meta { color: rgba(245, 233, 220, .22); }
+
+#connectors .task { padding: 14px 0; }
+#connectors .task + .task { border-top: 1px solid rgba(245, 233, 220, .08); }
+#connectors .task > header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+  color: rgba(245, 233, 220, .38);
+}
+#connectors .task-who { color: rgba(245, 233, 220, .62); }
+#connectors .task-state { color: rgba(245, 233, 220, .34); }
+#connectors .task[data-status="running"] .task-state { color: var(--listening); }
+#connectors .task[data-status="done"] .task-state { color: var(--speaking); }
+#connectors .task[data-status="failed"] .task-state,
+#connectors .task[data-status="timeout"] .task-state { color: var(--error); }
+#connectors .task > header button { margin-left: auto; }
+
+#connectors .task-what {
+  margin: 0;
+  font: 400 14px/1.6 var(--sans);
+  color: rgba(245, 233, 220, .9);
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+#connectors .task-said {
+  margin: 8px 0 0;
+  font: 400 13px/1.6 var(--sans);
+  color: rgba(245, 233, 220, .48);
+  text-wrap: pretty;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-height: 8.4em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#connectors .task-said.error { color: var(--error); }
+#connectors .empty.error { color: var(--error); }
 
 #memory-add {
   display: flex;
@@ -475,12 +607,14 @@ three-d-stage {
     padding: 11px 24px 11px 12px;
   }
   #history,
-  #memory {
+  #memory,
+  #connectors {
     top: calc(env(safe-area-inset-top) + 50px);
     bottom: calc(env(safe-area-inset-bottom) + 14px);
   }
   #history-log,
-  #memory-list { padding: 4px 14px 16px; }
+  #memory-list,
+  #connectors-list { padding: 4px 14px 16px; }
 
   #caption { font-size: 15px; max-height: 28dvh; }
 }
@@ -488,7 +622,7 @@ three-d-stage {
 @media (pointer: coarse) {
   #mic, #send { width: 44px; height: 44px; }
   #tabs button { padding: 13px 15px; }
-  #history-head button { padding: 12px 14px; }
+  #history-head button, #connectors-head button, #connectors .task button { padding: 12px 14px; }
   #tabs button:hover {
     color: rgba(245, 233, 220, .62);
     border-color: rgba(245, 233, 220, .14);
@@ -499,7 +633,8 @@ three-d-stage {
 
 @media (prefers-reduced-motion: reduce) {
   #you, #caption, #status, #tool, #tools, #composer, #mic, #send, #model, #voice,
-  #tabs button, #history-head button, #memory-head button, #memory-add button {
+  #tabs button, #history-head button, #memory-head button, #memory-add button,
+  #connectors-head button, #connectors .task button {
     transition-duration: .01ms;
   }
 }

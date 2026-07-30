@@ -13,9 +13,10 @@
 
 <div id="status" class="chip" data-state="idle">idle</div>
 <div id="tool" class="chip"></div>
-<div id="tasks" class="chip"></div>
 
 <div id="tabs">
+  <button id="connectors-toggle" class="chip" type="button" aria-expanded="false"
+          aria-controls="connectors">connectors</button>
   <button id="memory-toggle" class="chip" type="button" aria-expanded="false"
           aria-controls="memory">memory</button>
   <button id="history-toggle" class="chip" type="button" aria-expanded="false"
@@ -47,11 +48,28 @@
     <div id="options">
       <select id="model" class="chip" aria-label="Model"><option>loading…</option></select>
       <select id="voice" class="chip" aria-label="Voice"><option>voice</option></select>
+      <select id="agent" class="chip" aria-label="Which agent takes the work" hidden></select>
     </div>
   </form>
 
   <div id="tools" class="chip"></div>
 </div>
+
+<section id="connectors" hidden aria-label="Coding agents">
+  <header id="connectors-head">
+    <span class="chip">connectors</span>
+    <button id="connectors-save" class="chip" type="button" disabled>save</button>
+    <button id="connectors-close" class="chip" type="button" aria-label="Close connectors">close</button>
+  </header>
+  <div id="connectors-body">
+    <div id="connectors-setup"></div>
+    <p id="connectors-note" class="chip"></p>
+    <div id="connectors-tasks">
+      <span class="chip section">work</span>
+      <div id="connectors-list"></div>
+    </div>
+  </div>
+</section>
 
 <section id="history" hidden aria-label="Conversation history">
   <header id="history-head">

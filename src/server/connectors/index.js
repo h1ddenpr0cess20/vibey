@@ -1,3 +1,5 @@
+import { AGENT_NAMES } from './agents.js';
+import { applyPatch, describe, initialState, writeSettings } from './settings.js';
 import { createTasks } from './tasks.js';
 import { connectorTools, isConnectorTool } from './tools.js';
 
@@ -8,44 +10,40 @@ const RECENT = 10;
  * The connectors: the tools Star can call to hand real work to a real coding
  * agent, and the tasks that come of it.
  *
- * One of these is made per proxy rather than per call, so a task survives a
- * redial — changing voice mid-session shouldn't lose track of what is running.
- * The work happens here, in the Node process, not in the page: the page never
- * learns what command was run, and the model never sees more than a status.
+ * One of these is made per server rather than per call. Which agents are on,
+ * where they work and how much they may do is settings rather than startup —
+ * the panel changes them while the thing is running, and every live call is
+ * told about it so the model's tool list follows.
  */
-export function createConnectors(config) {
-  const names = config.tools?.connectors ?? [];
-  const settings = config.connectors ?? {};
-  const watchers = new Set();
+export function createConnectors(config = {}) {
+  let state = initialState(config);
 
-  if (!names.length) {
-    return {
-      enabled: false,
-      agents: [],
-      tools: [],
-      handles: () => false,
-      run: () => ({ ok: false, error: 'no coding agent is connected' }),
-      tasks: () => [],
-      watch: () => () => {},
-      close: () => {},
-    };
-  }
+  const watchers = new Set();
+  const listeners = new Set();
+
+  const enabled = () => AGENT_NAMES.filter((name) => state.agents[name]?.enabled);
 
   const tasks = createTasks({
-    agents: settings.agents,
-    cwd: settings.cwd,
-    timeoutMs: settings.timeoutMs,
-    limit: settings.limit,
+    settings: () => ({
+      agents: Object.fromEntries(enabled().map((name) => [name, state.agents[name]])),
+      cwd: state.cwd,
+      timeoutMs: state.timeoutMs,
+      limit: state.limit,
+    }),
     onChange: (task) => {
       for (const watcher of watchers) watcher(task);
     },
   });
 
-  function run(name, args) {
+  function run(name, args, { agent: picked } = {}) {
+    const names = enabled();
+    if (!names.length) return { ok: false, error: 'no coding agent is switched on' };
+
     try {
       switch (name) {
         case 'dispatch_task': {
-          const agent = names.includes(args?.agent) ? args.agent : names[0];
+          const asked = names.includes(args?.agent) ? args.agent : null;
+          const agent = asked ?? (names.includes(picked) ? picked : names[0]);
           const task = tasks.dispatch({ agent, task: args?.task });
           return { ok: true, ...task, note: 'it is running now — say so, and check back rather than waiting' };
         }
@@ -73,9 +71,44 @@ export function createConnectors(config) {
   }
 
   return {
-    enabled: true,
-    agents: [...names],
-    tools: connectorTools(names),
+    get enabled() {
+      return enabled().length > 0;
+    },
+
+    get agents() {
+      return enabled();
+    },
+
+    get announce() {
+      return state.announce;
+    },
+
+    get tools() {
+      return connectorTools(enabled());
+    },
+
+    /** Everything the panel shows, including the agents that are switched off. */
+    settings: () => describe(state),
+
+    /**
+     * A change from the panel. It is validated, applied to the running server,
+     * written to disk so it survives a restart, and announced — a call already
+     * up has to be told, or the model keeps the tool list it dialled with.
+     */
+    configure(patch) {
+      let next;
+      try {
+        next = applyPatch(state, patch);
+      } catch (err) {
+        return { ok: false, error: err?.message ?? String(err) };
+      }
+
+      state = { ...next, file: state.file };
+      const saved = writeSettings(state.file, state);
+      for (const listener of listeners) listener();
+      return { ok: true, saved, ...describe(state) };
+    },
+
     handles: (name) => isConnectorTool(name),
     run,
     tasks: () => tasks.list(),
@@ -86,8 +119,15 @@ export function createConnectors(config) {
       return () => watchers.delete(fn);
     },
 
+    /** Every settings change, for the same. */
+    onSettings(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+
     close() {
       watchers.clear();
+      listeners.clear();
       tasks.stopAll();
     },
   };

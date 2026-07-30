@@ -22,13 +22,14 @@ function micUnavailable() {
     : 'this browser won’t hand over a microphone — try opening the page in Safari or Chrome';
 }
 
-export function createVoiceSession({ model, voice, memory } = {}) {
+export function createVoiceSession({ model, voice, agent, memory } = {}) {
   const { on, emit } = createEmitter();
   const messages = [];
   const tools = memory ? createTools({ memory }) : {};
 
   let currentModel = model;
   let currentVoice = voice;
+  let currentAgent = agent;
 
   let call = null;
   let audio = null;
@@ -130,6 +131,7 @@ export function createVoiceSession({ model, voice, memory } = {}) {
       call = await connect({
         voice: currentVoice,
         model: currentModel,
+        agent: currentAgent,
         memories: memory?.lines() ?? [],
         onEvent: events.handle,
         onClose: (reason) => {
@@ -235,6 +237,14 @@ export function createVoiceSession({ model, voice, memory } = {}) {
     set voice(next) {
       currentVoice = next;
       picked++;
+    },
+    /** Which agent gets the work. Unlike voice and model, it lands mid-call. */
+    get agent() {
+      return currentAgent;
+    },
+    set agent(next) {
+      currentAgent = next;
+      if (next && call?.open) call.send({ type: 'session.agent', agent: next });
     },
     get stale() {
       return !!call && picked !== dialledPick;

@@ -63,8 +63,8 @@ Both `npm run dev` and `npm start` read `.env`.
 | `XAI_X_SEARCH` | `true` | |
 | `XAI_CODE_INTERPRETER` | `true` | Python in xAI's sandbox |
 | `MEMORY` | `true` | The `remember` and `forget` tools, and the memory block in the prompt |
-| `CONNECTORS` | — | `claude`, `codex`, or both. Off unless named — see [Connectors](#connectors) |
-| `CONNECTOR_CWD` | where the server started | The workspace the agents work in |
+| `CONNECTORS` | — | `claude`, `codex`, or both, on at first boot. After that the panel owns it — see [Connectors](#connectors) |
+| `CONNECTOR_CWD` | where the server started | Starting value for the workspace |
 | `CONNECTOR_TIMEOUT` | `900` | Seconds one task may run before it is stopped |
 | `CONNECTOR_LIMIT` | `3` | Tasks running at once |
 | `CONNECTOR_ANNOUNCE` | `true` | Star says so when a task settles, rather than waiting to be asked |
@@ -251,25 +251,41 @@ A connector is a coding agent this server may hand a task to. Two are wired:
 | **Claude Code** | `claude -p <task> --output-format json --permission-mode acceptEdits` |
 | **Codex** | `codex exec --json --sandbox workspace-write <task>` |
 
-Both are off until you ask for one, because both edit files on the machine the
-server is running on:
+Both are off until you switch one on, because both edit files on the machine the
+server is running on. That happens in the **connectors** panel, not in a file:
 
-```sh
-CONNECTORS=claude,codex
-CONNECTOR_CWD=/path/to/the/repo
 ```
+connectors                                    save   close
+  workspace  /home/you/the-repo    at once 3    time limit 900
+
+  [on ] Claude Code                                   claude
+        mode acceptEdits   model —   workspace —
+
+  [off] Codex                                          codex
+        mode workspace-write   model —   workspace —
+```
+
+Switch an agent on, point the workspace at the repo you want worked on, pick how
+much it is allowed to do, and save. It takes effect on the running server — mid
+call, without a redial — and is written to `connectors.json` (gitignored), so
+the next boot opens the same way. An agent that is on appears in the picker next
+to the voice, which is what a dispatch defaults to when the model doesn't name
+one itself.
 
 Each CLI has to be installed and already logged in — Vibey holds no credential
 for either, and hands them none. The `XAI_API_KEY` is stripped out of the
 environment the agents inherit; it is ours, and they have no use for it.
 
+The same panel is where the work shows up: every task, newest first, with what
+it was asked to do, how long it has been going, what the agent said at the end,
+and a `stop` button while it is still running. The tab counts what is in flight.
+
 Say what you want built. Star writes the task up, reads it back, and dispatches
 it on a yes. `dispatch_task` returns a number as soon as the process is spawned
-— the agent keeps working, the call carries on, and the chip under the status
-line says what is still in flight. When it settles, Star says so, in a sentence,
-without being asked. `check_task` is the model asking where one stands;
-`cancel_task` stops one, and Star will tell you that what it already wrote is
-still written.
+— the agent keeps working and the call carries on. When it settles, Star says
+so, in a sentence, without being asked. `check_task` is the model asking where
+one stands; `cancel_task` stops one, and Star will tell you that what it already
+wrote is still written.
 
 The tasks belong to the server, not to the call. Changing voice mid-session
 redials, and the new call opens knowing what was dispatched before it — running
@@ -280,21 +296,27 @@ browser never learns what command was run, and only ever sees a status. The
 model doesn't see the command line either, or the agent's raw output beyond the
 summary it printed at the end.
 
+### From the environment
+
+`.env` sets the defaults for a fresh machine — `CONNECTORS=claude,codex` starts
+with those on — and owns the one thing the panel deliberately cannot touch:
+
 ### Per agent
 
 | | |
 |---|---|
-| `CLAUDE_COMMAND`, `CODEX_COMMAND` | A whole command line, so the CLI can be wrapped — `npx claude`, `docker exec -w /work dev codex`. The flags above are appended to it. |
-| `CLAUDE_MODEL`, `CODEX_MODEL` | Passed as `--model`. |
-| `CLAUDE_PERMISSION_MODE` | `plan`, `acceptEdits` (default), `bypassPermissions`. |
+| `CLAUDE_COMMAND`, `CODEX_COMMAND` | **Panel-proof.** A whole command line, so the CLI can be wrapped — `npx claude`, `docker exec -w /work dev codex`. The flags above are appended to it. Which binary this server executes is not something a browser gets to choose. |
+| `CLAUDE_ARGS`, `CODEX_ARGS` | Anything else, split like a shell would. Also panel-proof. |
+| `CONNECTOR_FILE` | Where the panel saves. `connectors.json` by default. |
+| `CLAUDE_MODEL`, `CODEX_MODEL` | Starting value for the model field. |
+| `CLAUDE_PERMISSION_MODE` | `plan`, `acceptEdits` (default), `bypassPermissions` — and the rest the CLI publishes. |
 | `CODEX_SANDBOX` | `read-only`, `workspace-write` (default), `danger-full-access`. |
-| `CLAUDE_ARGS`, `CODEX_ARGS` | Anything else, split like a shell would. |
 | `CLAUDE_CWD`, `CODEX_CWD` | A different workspace for that one agent. |
 
-The defaults are the modes that let an agent finish a task inside the workspace
-and nothing wider. Both CLIs have a mode that turns the rest of the guardrails
-off; neither is the default here, and a voice interface is a poor place to be
-casual about which one is on.
+An agent switched on from the panel starts in the mode that lets it finish a
+task inside the workspace and nothing wider. Both CLIs have a mode that turns
+the rest of the guardrails off; the panel says so in red next to the choice, and
+a voice interface is a poor place to be casual about which one is on.
 
 Each CLI's machine-readable output has already changed shape at least once, so
 the parsers take what they know — Claude's `result`, Codex's last
@@ -391,7 +413,8 @@ src/
   client/
     main.js             The wiring, and nothing else
     styles.css          The HUD around the star
-    api.js              /api/config, as a function
+    api.js              The HTTP API, /api/connectors, /api/tasks
+    tasks.js            What the agents are working on, mirrored in the page
     history.js          Past conversations, in localStorage
     memory.js           What it remembers between calls, in localStorage
     star/               Geometry and animation. Knows nothing about transports
@@ -414,6 +437,7 @@ src/
       hud.js              Status chip, transcript, caption, tool label
       history.js          The log panel behind the `log` button
       memory.js           The memory panel behind the `memory` button
+      connectors.js       Agent setup and the work, behind the `connectors` button
       controls.js         Mic, text field, send, pickers
       viewport.js         Keeps the composer above the on-screen keyboard
       stage.js            Strips the starter component's own chrome
@@ -432,6 +456,7 @@ src/
       agents.js           Claude Code and Codex, as command lines and parsers
       tasks.js            Spawn, watch, time out, kill
       tools.js            What the model is told it can dispatch
+      settings.js         The setup the panel edits, validated and saved
 docs/                   Policies: the output disclaimer, and what this is not
 test/                   node:test, against a stub xAI socket
 .github/workflows/      CI (lint, tests, build smoke test) and the Docker publish
@@ -480,6 +505,7 @@ and emits:
 'ready'        { model, voice } the proxy actually used
 'memory'       the result of a remember/forget the model just called
 'task'         a dispatched task changed state — { id, agent, status, … }
+'agents'       the connector setup changed — which agents are on now
 'done'         { usage }
 'error'        { message }
 ```

@@ -15,6 +15,10 @@ export const AGENTS = Object.freeze({
   claude: {
     label: 'Claude Code',
     command: 'claude',
+    /** Its permission modes, safest first. The panel offers exactly these. */
+    modes: ['plan', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions'],
+    /** What it is switched on as: enough to do the work, no wider. */
+    defaultMode: 'acceptEdits',
     /** `-p` is print mode: one task, no session, a JSON document on stdout. */
     args({ task, model, mode, extra }) {
       return [
@@ -39,6 +43,9 @@ export const AGENTS = Object.freeze({
   codex: {
     label: 'Codex',
     command: 'codex',
+    /** Its sandbox policies, safest first. */
+    modes: ['read-only', 'workspace-write', 'danger-full-access'],
+    defaultMode: 'workspace-write',
     /** `exec` is the non-interactive path; without a sandbox it may only read. */
     args({ task, model, mode, extra }) {
       return [

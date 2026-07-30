@@ -6,9 +6,11 @@ import { createHistory } from './history.js';
 import { createMemory } from './memory.js';
 import { createStar } from './star/index.js';
 import { createVoiceSession } from './session/index.js';
+import { createTaskBoard } from './tasks.js';
 import { createControls } from './ui/controls.js';
 import { createHistoryPanel } from './ui/history.js';
 import { createMemoryPanel } from './ui/memory.js';
+import { createConnectorsPanel } from './ui/connectors.js';
 import { createHud } from './ui/hud.js';
 import { stripStageChrome } from './ui/stage.js';
 import { trackKeyboardInset } from './ui/viewport.js';
@@ -24,6 +26,15 @@ const hud = createHud();
 const history = createHistory();
 const historyPanel = createHistoryPanel({ history, onNew: startFresh });
 const memoryPanel = createMemoryPanel({ memory, onChange: () => session.syncMemory() });
+const board = createTaskBoard();
+const connectorsPanel = createConnectorsPanel({
+  board,
+  /** Switching an agent on in the panel fills the picker in the composer. */
+  onAgents: (agents) => {
+    const chosen = controls.setAgents(agents);
+    session.agent = chosen;
+  },
+});
 
 trackKeyboardInset();
 
@@ -61,9 +72,14 @@ const controls = createControls({
     redial();
   },
 
+  onAgentChange(agent) {
+    session.agent = agent;
+  },
+
   onCancel() {
     if (memoryPanel.isOpen) return memoryPanel.close();
     if (historyPanel.isOpen) return historyPanel.close();
+    if (connectorsPanel.isOpen) return connectorsPanel.close();
     session.cancel();
   },
 });
@@ -131,11 +147,13 @@ session.on('user', (text) => {
 });
 session.on('tool', (label) => hud.setTool(label));
 
-/** Dispatched work outlives the call it was dispatched from, so this doesn't clear. */
-const tasks = new Map();
-session.on('task', (task) => {
-  tasks.set(task.id, task);
-  hud.setTasks([...tasks.values()]);
+/** Dispatched work outlives the call it came from, so the board is never cleared. */
+session.on('task', (task) => board.apply(task));
+
+/** The setup changed — in this page's panel or another one's. */
+session.on('agents', (agents) => {
+  session.agent = controls.setAgents(agents);
+  board.refresh().catch(() => {});
 });
 
 session.on('message', (message) => history.append(message));
@@ -154,6 +172,7 @@ try {
   const chosen = controls.setCatalog(config);
   session.model = chosen.model;
   session.voice = chosen.voice;
+  session.agent = chosen.agent;
   hud.showTools(config.tools);
   if (!config.ready) throw new Error('XAI_API_KEY is not set — nothing to dial with.');
 } catch (err) {
@@ -161,6 +180,9 @@ try {
   controls.unavailable();
   hud.showError(`${err.message} — is the proxy running? (npm run dev)`);
 }
+
+/** What was dispatched before this page existed, and whether there is an agent at all. */
+board.refresh().catch(() => {});
 
 window.addEventListener('pagehide', () => session.stop());
 

@@ -1,12 +1,23 @@
 import { once } from 'node:events';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { WebSocket } from 'ws';
 
 import { createApp } from '../../src/server/app.js';
 import { loadConfig } from '../../src/server/config.js';
 
+/** A settings file per test, so no test ever writes the repo's own. */
+export function scratchSettings() {
+  return join(tmpdir(), `vibey-connectors-${Math.random().toString(36).slice(2)}.json`);
+}
+
 export async function startApp(env = {}) {
-  const config = loadConfig({ XAI_API_KEY: 'xai-test-key', ...env });
+  const config = loadConfig({
+    XAI_API_KEY: 'xai-test-key',
+    CONNECTOR_FILE: scratchSettings(),
+    ...env,
+  });
   const server = createApp(config, { root: '/nonexistent' });
 
   server.listen(0, '127.0.0.1');

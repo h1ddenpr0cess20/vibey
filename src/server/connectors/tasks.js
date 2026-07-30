@@ -18,7 +18,7 @@ const TASK_LENGTH = 240;
  * that the call carries on while the agent works — so everything after that is
  * a status change, reported through `onChange`.
  */
-export function createTasks({ agents, cwd, timeoutMs, limit, onChange = () => {} } = {}) {
+export function createTasks({ settings, onChange = () => {} } = {}) {
   const tasks = new Map();
   const children = new Map();
   let next = 1;
@@ -36,9 +36,11 @@ export function createTasks({ agents, cwd, timeoutMs, limit, onChange = () => {}
   }
 
   function dispatch({ agent: name, task: text }) {
-    const settings = agents?.[name];
-    if (!settings) {
-      throw new Error(`no connector for ${name} — configured: ${Object.keys(agents ?? {}).join(', ') || 'none'}`);
+    /** Read fresh: the panel can have changed any of this since the last task. */
+    const { agents, cwd, timeoutMs, limit } = settings();
+    const chosen = agents?.[name];
+    if (!chosen) {
+      throw new Error(`${name} is not switched on — on now: ${Object.keys(agents ?? {}).join(', ') || 'nothing'}`);
     }
 
     const work = String(text ?? '').replace(/\s+/g, ' ').trim();
@@ -50,8 +52,8 @@ export function createTasks({ agents, cwd, timeoutMs, limit, onChange = () => {}
     }
 
     const agent = AGENTS[name];
-    const [command, ...lead] = settings.command;
-    const args = [...lead, ...agent.args({ ...settings, task: work })];
+    const [command, ...lead] = chosen.command;
+    const args = [...lead, ...agent.args({ extra: [], ...chosen, task: work })];
 
     const task = {
       id: String(next++),
@@ -72,7 +74,11 @@ export function createTasks({ agents, cwd, timeoutMs, limit, onChange = () => {}
 
     let child;
     try {
-      child = spawn(command, args, { cwd: settings.cwd ?? cwd, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(command, args, {
+        cwd: chosen.cwd || cwd,
+        env: childEnv(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
     } catch (err) {
       settle(task, 'failed', { error: err.message });
       return view(task);
@@ -185,6 +191,9 @@ export function view(task) {
     status: task.status,
     task: task.task.length > TASK_LENGTH ? `${task.task.slice(0, TASK_LENGTH)}…` : task.task,
     ran_for: humanDuration(ran),
+    /** For the panel, which counts a running task up itself rather than waiting. */
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
     ...(task.summary ? { summary: task.summary } : {}),
     ...(task.error ? { error: task.error } : {}),
   };
