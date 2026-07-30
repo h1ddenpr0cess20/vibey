@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
 
 import { AGENTS, agentLabel } from './agents.js';
 
@@ -52,14 +53,18 @@ export function createTasks({ settings, onChange = () => {} } = {}) {
     }
 
     const agent = AGENTS[name];
+    /** Resolved once, here: it is what the agent gets, what the task records,
+     *  and what the panel shows — nobody has to ask the agent where it is. */
+    const where = resolve(chosen.cwd || cwd || process.cwd());
     const [command, ...lead] = chosen.command;
-    const args = [...lead, ...agent.args({ extra: [], ...chosen, task: work })];
+    const args = [...lead, ...agent.args({ extra: [], ...chosen, task: work, cwd: where })];
 
     const task = {
       id: String(next++),
       agent: name,
       label: agentLabel(name),
       task: work,
+      cwd: where,
       status: 'running',
       startedAt: Date.now(),
       endedAt: null,
@@ -75,8 +80,8 @@ export function createTasks({ settings, onChange = () => {} } = {}) {
     let child;
     try {
       child = spawn(command, args, {
-        cwd: chosen.cwd || cwd,
-        env: childEnv(),
+        cwd: where,
+        env: childEnv(where),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (err) {
@@ -167,9 +172,16 @@ export function createTasks({ settings, onChange = () => {} } = {}) {
   };
 }
 
-/** The agents inherit the environment, minus the one credential that is ours. */
-function childEnv() {
-  const env = { ...process.env };
+/**
+ * The agents inherit the environment, minus the one credential that is ours.
+ *
+ * `PWD` is rewritten rather than inherited: spawning with a `cwd` moves the
+ * process but leaves that variable pointing at wherever the server was started,
+ * and anything downstream that trusts it rather than asking the kernel then
+ * reports the wrong directory.
+ */
+function childEnv(cwd) {
+  const env = { ...process.env, PWD: cwd };
   delete env.XAI_API_KEY;
   return env;
 }
@@ -191,6 +203,7 @@ export function view(task) {
     status: task.status,
     task: task.task.length > TASK_LENGTH ? `${task.task.slice(0, TASK_LENGTH)}…` : task.task,
     ran_for: humanDuration(ran),
+    cwd: task.cwd,
     /** For the panel, which counts a running task up itself rather than waiting. */
     startedAt: task.startedAt,
     endedAt: task.endedAt,

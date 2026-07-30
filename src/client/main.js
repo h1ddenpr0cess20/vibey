@@ -148,7 +148,20 @@ session.on('user', (text) => {
 session.on('tool', (label) => hud.setTool(label));
 
 /** Dispatched work outlives the call it came from, so the board is never cleared. */
-session.on('task', (task) => board.apply(task));
+session.on('task', (task) => {
+  board.apply(task);
+  if (task.status === 'running') return;
+
+  /** What the agent sent back belongs in the log, beside the talk that sent it. */
+  history.append({
+    role: 'agent',
+    agent: task.agent,
+    taskId: task.id,
+    status: task.status,
+    task: task.task,
+    content: task.error ? `${task.error}${task.summary ? `\n\n${task.summary}` : ''}` : task.summary,
+  });
+});
 
 /** The setup changed — in this page's panel or another one's. */
 session.on('agents', (agents) => {

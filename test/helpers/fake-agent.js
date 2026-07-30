@@ -6,6 +6,7 @@
  *   ...fail     writes to stderr and exits non-zero
  *   ...sleep    stays up until it is killed
  *   ...quiet    exits cleanly having said nothing
+ *   ...where    reports the directory it was actually started in
  */
 const [shape, ...argv] = process.argv.slice(2);
 
@@ -20,6 +21,11 @@ if (/\bsleep\b/.test(task)) {
   setInterval(() => {}, 1000);
 } else if (/\bquiet\b/.test(task)) {
   process.exit(0);
+} else if (/\bwhere\b/.test(task)) {
+  const said = `cwd=${process.cwd()} PWD=${process.env.PWD} key=${process.env.XAI_API_KEY}`;
+  process.stdout.write(shape === 'claude'
+    ? `${JSON.stringify({ type: 'result', is_error: false, result: said })}\n`
+    : `${JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: said } })}\n`);
 } else if (shape === 'claude') {
   process.stdout.write(`${JSON.stringify({
     type: 'result',

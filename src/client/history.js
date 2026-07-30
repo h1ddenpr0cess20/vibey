@@ -24,6 +24,10 @@ export function defaultStorage() {
   }
 }
 
+/** Who a turn came from. The third one is not in the conversation: it is what
+ *  a coding agent sent back, kept beside the talking that dispatched it. */
+const ROLES = new Set(['user', 'assistant', 'agent']);
+
 function newId(startedAt) {
   return `c${startedAt.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -96,7 +100,14 @@ export function createHistory({
     const content = typeof message?.content === 'string' ? message.content.trim() : '';
     if (!content) return null;
 
-    const turn = { role: message.role === 'assistant' ? 'assistant' : 'user', content, at: now() };
+    const role = ROLES.has(message.role) ? message.role : 'user';
+    const turn = { role, content, at: now() };
+    if (role === 'agent') {
+      turn.agent = String(message.agent ?? 'agent');
+      turn.taskId = String(message.taskId ?? '');
+      turn.status = String(message.status ?? 'done');
+      if (message.task) turn.task = String(message.task);
+    }
     open ??= begin();
     if (!conversations.includes(open)) conversations.unshift(open);
     open.messages.push(turn);

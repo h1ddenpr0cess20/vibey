@@ -187,6 +187,8 @@ Safari and under any CSP that disallows `data:`.
 
 Every completed turn is written to `localStorage` under `vibey.history.v1`, one
 record per call, and the `log` button in the composer opens them newest first.
+A settled task is a turn too — a third kind, alongside you and Star — so what a
+coding agent actually said is in the log rather than only in the panel.
 It is the only thing here that outlives the call: the session forgets a
 conversation at teardown, and a redial starts one the new voice has no memory
 of.
@@ -276,9 +278,15 @@ Each CLI has to be installed and already logged in — Vibey holds no credential
 for either, and hands them none. The `XAI_API_KEY` is stripped out of the
 environment the agents inherit; it is ours, and they have no use for it.
 
-The same panel is where the work shows up: every task, newest first, with what
-it was asked to do, how long it has been going, what the agent said at the end,
-and a `stop` button while it is still running. The tab counts what is in flight.
+The same panel is where the work shows up: every task, newest first, with the
+directory it is running in, what it was asked to do, how long it has been going,
+what the agent said at the end, and a `stop` button while it is still running.
+The tab counts what is in flight.
+
+What an agent sends back also lands in the **log**, beside the conversation that
+dispatched it — labelled with the agent and the task number, the task above it,
+the whole reply below. That is the copy you can read at leisure: what Star says
+out loud is a sentence about it.
 
 Say what you want built. Star writes the task up, reads it back, and dispatches
 it on a yes. `dispatch_task` returns a number as soon as the process is spawned
@@ -323,6 +331,12 @@ the parsers take what they know — Claude's `result`, Codex's last
 `agent_message` — and fall back to the tail of what was actually printed rather
 than failing a task over a renamed field. A non-zero exit is a failure, and the
 last of stderr rides back with it.
+
+The workspace is resolved once, when the task is dispatched, and recorded on the
+task itself — the panel and the log show where it ran rather than leaving you to
+ask the agent, which answers from inside whatever sandbox it runs in. Codex is
+handed it as `--cd` rather than by inheritance, and `PWD` is rewritten in the
+child's environment, which `spawn` does not do on its own.
 
 Star is told, in the prompt, that this edits real files: read the task back
 before dispatching, get a plain yes for anything that doesn't come back, and

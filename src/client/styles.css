@@ -392,6 +392,43 @@ three-d-stage {
 }
 #history .turn[data-role="assistant"] .who { color: var(--thinking); }
 
+#history .turn.agent {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(245, 233, 220, .04);
+  border-left: 2px solid var(--listening);
+}
+#history .turn.agent[data-status="failed"],
+#history .turn.agent[data-status="timeout"] { border-left-color: var(--error); }
+#history .turn.agent[data-status="cancelled"] { border-left-color: rgba(245, 233, 220, .3); }
+#history .agent-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+#history .turn.agent .who { color: var(--listening); margin: 0; }
+#history .agent-status { color: rgba(245, 233, 220, .3); }
+#history .turn.agent[data-status="failed"] .agent-status,
+#history .turn.agent[data-status="timeout"] .agent-status { color: var(--error); }
+#history .agent-task {
+  margin: 0 0 8px;
+  font: 400 13px/1.55 var(--sans);
+  color: rgba(245, 233, 220, .42);
+  text-wrap: pretty;
+}
+#history .agent-said {
+  margin: 0;
+  font: 400 13px/1.65 var(--mono);
+  color: rgba(245, 233, 220, .82);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-height: 18em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 #history .empty,
 #memory .empty,
 #connectors .empty {
@@ -545,6 +582,12 @@ three-d-stage {
 #connectors .task[data-status="timeout"] .task-state { color: var(--error); }
 #connectors .task > header button { margin-left: auto; }
 
+#connectors .task-where {
+  margin: 0 0 6px;
+  font: 400 12px/1.5 var(--mono);
+  color: rgba(245, 233, 220, .28);
+  overflow-wrap: anywhere;
+}
 #connectors .task-what {
   margin: 0;
   font: 400 14px/1.6 var(--sans);

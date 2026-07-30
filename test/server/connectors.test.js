@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
@@ -548,6 +550,52 @@ describe('too much at once', () => {
       await app.close();
       await xai.close();
     }
+  });
+});
+
+describe('where an agent actually works', () => {
+  it('starts it in the workspace, and says so in the task rather than the agent', async () => {
+    const xai = await startXaiStub();
+    const app = await startApp(wired({ XAI_REALTIME_URL: xai.address, CONNECTOR_CWD: tmpdir() }));
+    try {
+      const client = await app.openSocket();
+      await client.waitFor('proxy.ready');
+      xai.send({
+        type: 'response.output_item.done',
+        item: {
+          type: 'function_call',
+          call_id: 'w1',
+          name: 'dispatch_task',
+          arguments: JSON.stringify({ task: 'say where you are' }),
+        },
+      });
+
+      const dispatched = await until(() => xai.received()
+        .filter((f) => f.item?.type === 'function_call_output')
+        .map((f) => JSON.parse(f.item.output))
+        .find((o) => o.cwd));
+      assert.equal(dispatched.cwd, resolve(tmpdir()), 'the task carries the resolved workspace');
+
+      const settled = await until(() => client.frames.find(
+        (f) => f.type === 'task.update' && f.task.status === 'done',
+      ));
+
+      assert.match(settled.task.summary, new RegExp(`cwd=${resolve(tmpdir())}\\b`),
+        'and that is the directory the process was started in');
+      assert.match(settled.task.summary, new RegExp(`PWD=${resolve(tmpdir())}\\b`),
+        'including PWD, which spawn does not update on its own');
+      assert.match(settled.task.summary, /key=undefined/, 'and never our key');
+    } finally {
+      await app.close();
+      await xai.close();
+    }
+  });
+
+  it('hands codex the workspace as a flag rather than trusting inheritance', () => {
+    const args = AGENTS.codex.args({
+      task: 'go', model: '', mode: 'workspace-write', extra: [], cwd: '/work',
+    });
+    assert.deepEqual(args.slice(0, 4), ['exec', '--json', '--cd', '/work']);
   });
 });
 

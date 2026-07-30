@@ -47,10 +47,11 @@ export const AGENTS = Object.freeze({
     modes: ['read-only', 'workspace-write', 'danger-full-access'],
     defaultMode: 'workspace-write',
     /** `exec` is the non-interactive path; without a sandbox it may only read. */
-    args({ task, model, mode, extra }) {
+    args({ task, model, mode, extra, cwd }) {
       return [
         'exec',
         '--json',
+        ...(cwd ? ['--cd', cwd] : []),
         ...(mode ? ['--sandbox', mode] : []),
         ...(model ? ['--model', model] : []),
         ...extra,

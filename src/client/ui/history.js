@@ -10,6 +10,19 @@ function when(at, now = Date.now()) {
 
 const WHO = { user: 'you', assistant: 'star' };
 
+/** What a coding agent's turn is labelled with, and what it did, above it. */
+function agentHead(doc, turn) {
+  const head = doc.createElement('span');
+  head.className = 'who chip';
+  head.append([turn.agent, turn.taskId].filter(Boolean).join(' '));
+
+  const state = doc.createElement('span');
+  state.className = 'chip agent-status';
+  state.append(turn.status === 'done' ? 'done' : turn.status);
+
+  return [head, state];
+}
+
 export function createHistoryPanel({ root = document, history, onNew } = {}) {
   const panelEl = root.querySelector('#history');
   const logEl = root.querySelector('#history-log');
@@ -45,6 +58,11 @@ export function createHistoryPanel({ root = document, history, onNew } = {}) {
     section.append(head);
 
     for (const turn of conversation.messages) {
+      if (turn.role === 'agent') {
+        section.append(agentEl(turn));
+        continue;
+      }
+
       const line = doc.createElement('p');
       line.className = 'turn';
       line.dataset.role = turn.role;
@@ -58,6 +76,34 @@ export function createHistoryPanel({ root = document, history, onNew } = {}) {
     }
 
     return section;
+  }
+
+  /** An agent's turn is a block rather than a line: what it was asked, then
+   *  what it sent back, which is longer than anything anyone says out loud. */
+  function agentEl(turn) {
+    const block = doc.createElement('div');
+    block.className = 'turn agent';
+    block.dataset.role = 'agent';
+    block.dataset.status = turn.status;
+
+    const head = doc.createElement('p');
+    head.className = 'agent-head';
+    head.append(...agentHead(doc, turn));
+    block.append(head);
+
+    if (turn.task) {
+      const asked = doc.createElement('p');
+      asked.className = 'agent-task';
+      asked.append(turn.task);
+      block.append(asked);
+    }
+
+    const said = doc.createElement('p');
+    said.className = 'agent-said';
+    said.append(turn.content);
+    block.append(said);
+
+    return block;
   }
 
   function render() {

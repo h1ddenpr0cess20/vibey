@@ -201,7 +201,17 @@ export function createConnectorsPanel({ root = document, board, onAgents } = {})
     what.className = 'task-what';
     what.append(task.task);
 
-    row.append(head, what);
+    row.append(head);
+
+    /** Where it actually ran, from the task itself — not from asking the agent. */
+    if (task.cwd) {
+      const where = doc.createElement('p');
+      where.className = 'task-where';
+      where.append(task.cwd);
+      row.append(where);
+    }
+
+    row.append(what);
 
     const said = task.error || task.summary;
     if (said) {

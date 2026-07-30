@@ -90,6 +90,51 @@ describe('recording', () => {
   });
 });
 
+describe('what a coding agent sent back', () => {
+  it('goes in the log as its own kind of turn, beside the talking', () => {
+    const { history } = harness();
+    history.append({ role: 'user', content: 'add a retry' });
+    history.append({
+      role: 'agent',
+      agent: 'codex',
+      taskId: '3',
+      status: 'done',
+      task: 'add a retry around the fetch',
+      content: 'two files changed, tests pass',
+    });
+
+    const [conversation] = history.conversations;
+    const [said, agent] = conversation.messages;
+    assert.equal(said.role, 'user');
+    assert.equal(agent.role, 'agent');
+    assert.equal(agent.agent, 'codex');
+    assert.equal(agent.taskId, '3');
+    assert.equal(agent.status, 'done');
+    assert.equal(agent.task, 'add a retry around the fetch');
+    assert.equal(agent.content, 'two files changed, tests pass');
+  });
+
+  it('survives being read back by a later page', () => {
+    const store = new Map();
+    const storage = {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => store.set(k, String(v)),
+      removeItem: (k) => store.delete(k),
+    };
+    createHistory({ storage }).append({ role: 'agent', agent: 'claude', taskId: '1', content: 'done' });
+
+    const [conversation] = createHistory({ storage }).conversations;
+    assert.equal(conversation.messages[0].role, 'agent');
+    assert.equal(conversation.messages[0].agent, 'claude');
+  });
+
+  it('is still a turn like any other when the role is nonsense', () => {
+    const { history } = harness();
+    history.append({ role: 'robot', content: 'beep' });
+    assert.equal(history.conversations[0].messages[0].role, 'user');
+  });
+});
+
 describe('persistence', () => {
   it('reads back what an earlier page wrote', () => {
     const storage = fakeStorage();
