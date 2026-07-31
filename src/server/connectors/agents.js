@@ -1,7 +1,7 @@
 /**
  * The coding agents a task can be handed to, as command lines.
  *
- * Both are run headless, once per task, in the workspace directory — no TTY, no
+ * Each is run headless, once per task, in the workspace directory — no TTY, no
  * prompt to answer, nothing to attend to while they work. What comes back on
  * stdout is a machine format that each CLI has already changed once, so the
  * parsers take the shape they know and fall back to the tail of the output
@@ -61,6 +61,64 @@ export const AGENTS = Object.freeze({
     parse(stdout, stderr) {
       const text = lastAgentMessage(jsonObjects(stdout));
       return { summary: trim(text || fallback(stdout, stderr)) };
+    },
+  },
+
+  opencode: {
+    label: 'OpenCode',
+    command: 'opencode',
+    /**
+     * It has no permission modes of its own: the rules live in its config, and
+     * a run that isn't interactive rejects anything they leave open to ask.
+     * `auto` is the one thing the flag changes — waving those through.
+     */
+    modes: ['default', 'auto'],
+    defaultMode: 'default',
+    /** `run` is the non-interactive path: one prompt, JSON events, then exit. */
+    args({ task, model, mode, extra, cwd }) {
+      return [
+        'run',
+        '--format', 'json',
+        ...(cwd ? ['--dir', cwd] : []),
+        ...(mode === 'auto' ? ['--auto'] : []),
+        ...(model ? ['--model', model] : []),
+        ...extra,
+        task,
+      ];
+    },
+    parse(stdout, stderr) {
+      const text = lastPartText(jsonObjects(stdout));
+      return { summary: trim(text || fallback(stdout, stderr)) };
+    },
+  },
+
+  grok: {
+    label: 'Grok Build',
+    command: 'grok',
+    /** Its permission modes, safest first. */
+    modes: ['plan', 'default', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions'],
+    defaultMode: 'acceptEdits',
+    /** `-p` is its headless mode: one prompt, one JSON object at the end. */
+    args({ task, model, mode, extra, cwd }) {
+      return [
+        '-p', task,
+        '--output-format', 'json',
+        ...(cwd ? ['--cwd', cwd] : []),
+        ...(mode ? ['--permission-mode', mode] : []),
+        ...(model ? ['--model', model] : []),
+        ...extra,
+      ];
+    },
+    parse(stdout, stderr) {
+      const last = findLast(
+        jsonObjects(stdout),
+        (o) => typeof o.text === 'string' || o.type === 'error',
+      );
+      if (last?.type === 'error') {
+        return { error: trim(last.message) || 'the run reported an error' };
+      }
+      if (last) return { summary: trim(last.text) };
+      return { summary: trim(fallback(stdout, stderr)) };
     },
   },
 });
@@ -144,6 +202,21 @@ function lastAgentMessage(objects) {
     for (const key of MESSAGE_KEYS) {
       if (typeof item[key] === 'string' && item[key].trim()) found = item[key];
     }
+  }
+  return found;
+}
+
+/**
+ * The last text opencode printed, out of a stream of message parts. The text
+ * of a part sits under `part`, and one arrives per finished block, so the last
+ * one is what the agent was saying when it stopped.
+ */
+function lastPartText(objects) {
+  let found = '';
+  for (const object of objects) {
+    if (object.type !== 'text') continue;
+    const part = isObject(object.part) ? object.part : object;
+    if (typeof part.text === 'string' && part.text.trim()) found = part.text;
   }
   return found;
 }

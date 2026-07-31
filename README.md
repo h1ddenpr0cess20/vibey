@@ -10,8 +10,9 @@ It can search the web and X, run code in xAI's sandbox, and call remote MCP
 servers. It also remembers what you tell it to, between calls.
 
 And it can hand the work over. With a connector switched on, Star writes the
-task up, dispatches it to **Claude Code** or **Codex** running on this machine,
-and tells you when it lands — while the call carries on.
+task up, dispatches it to **Claude Code**, **Codex**, **OpenCode** or **Grok
+Build** running on this machine, and tells you when it lands — while the call
+carries on.
 
 ![Star mid-sentence, with a dispatch to Claude Code just read back](docs/screenshots/desktop.png)
 
@@ -49,10 +50,10 @@ the call survives that too.
 CI runs the lint, the tests on Node 22.12 and 24, and a build that then has to
 boot and serve itself over both HTTP and HTTPS.
 
-Both coding agents are off until you switch one on in the **connectors** panel,
-because both edit files on the machine the server is running on. Vibey has no
-accounts and no auth: **anyone who can reach the page can spend your agent's
-tokens on your files.** That's fine for `localhost`, and it is the whole story
+The coding agents are all off until you switch one on in the **connectors**
+panel, because they edit files on the machine the server is running on. Vibey
+has no accounts and no auth: **anyone who can reach the page can spend your
+agent's tokens on your files.** That's fine for `localhost`, and it is the whole story
 before you put it on a LAN with connectors on — see
 [connectors](docs/connectors.md).
 
@@ -61,9 +62,9 @@ To run it on a phone, or in Docker, see
 
 ## Docs
 
-- [**Connectors**](docs/connectors.md) — handing work to Claude Code or Codex:
-  the panel, what each agent is run as, where tasks show up, and the settings
-  a browser deliberately can't reach.
+- [**Connectors**](docs/connectors.md) — handing work to Claude Code, Codex,
+  OpenCode or Grok Build: the panel, what each agent is run as, where tasks show
+  up, and the settings a browser deliberately can't reach.
 - [**Configuration**](docs/configuration.md) — every environment variable, the
   HTTPS setup a phone needs for microphone access, Docker, and the tools.
 - [**Design notes**](docs/design.md) — how the call is wired, the audio path,

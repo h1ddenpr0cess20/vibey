@@ -49,6 +49,8 @@ function readMcpFile(path) {
 const CONNECTOR_ENV = Object.freeze({
   claude: { prefix: 'CLAUDE', mode: 'CLAUDE_PERMISSION_MODE', defaultMode: 'acceptEdits' },
   codex: { prefix: 'CODEX', mode: 'CODEX_SANDBOX', defaultMode: 'workspace-write' },
+  opencode: { prefix: 'OPENCODE', mode: 'OPENCODE_PERMISSION_MODE', defaultMode: 'default' },
+  grok: { prefix: 'GROK', mode: 'GROK_PERMISSION_MODE', defaultMode: 'acceptEdits' },
 });
 
 /** How long an agent may work before it is stopped, and how many may at once. */

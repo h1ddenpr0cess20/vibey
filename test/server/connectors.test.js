@@ -38,10 +38,10 @@ describe('which agents are connected', () => {
     assert.equal(buildTools(config.tools).some((t) => t.name === 'dispatch_task'), false);
   });
 
-  it('takes the two it knows, in the order they were named', () => {
-    const { tools, connectors } = loadConfig({ CONNECTORS: 'codex, claude' });
-    assert.deepEqual(tools.connectors, ['codex', 'claude']);
-    assert.deepEqual(Object.keys(connectors.agents), ['codex', 'claude']);
+  it('takes the ones it knows, in the order they were named', () => {
+    const { tools, connectors } = loadConfig({ CONNECTORS: 'codex, claude, grok, opencode' });
+    assert.deepEqual(tools.connectors, ['codex', 'claude', 'grok', 'opencode']);
+    assert.deepEqual(Object.keys(connectors.agents), ['codex', 'claude', 'grok', 'opencode']);
   });
 
   it('is the seed for the registry, which is what the panel then edits', () => {
@@ -83,10 +83,12 @@ describe('which agents are connected', () => {
     const connectors = createConnectors(loadConfig({ CONNECTOR_FILE: scratchSettings() }));
     try {
       const { agents, cwd } = connectors.settings();
-      assert.deepEqual(agents.map((a) => a.name), ['claude', 'codex']);
-      assert.deepEqual(agents.map((a) => a.enabled), [false, false]);
+      assert.deepEqual(agents.map((a) => a.name), ['claude', 'codex', 'opencode', 'grok']);
+      assert.deepEqual(agents.map((a) => a.enabled), [false, false, false, false]);
       assert.ok(agents[0].modes.includes('acceptEdits'));
       assert.ok(agents[1].modes.includes('workspace-write'));
+      assert.ok(agents[2].modes.includes('auto'));
+      assert.ok(agents[3].modes.includes('bypassPermissions'));
       assert.equal(cwd, process.cwd());
     } finally {
       connectors.close();
@@ -99,11 +101,15 @@ describe('which agents are connected', () => {
   });
 
   it('defaults each agent to its own CLI and its safer mode', () => {
-    const { connectors } = loadConfig({ CONNECTORS: 'claude, codex' });
+    const { connectors } = loadConfig({ CONNECTORS: 'claude, codex, opencode, grok' });
     assert.deepEqual(connectors.agents.claude.command, ['claude']);
     assert.equal(connectors.agents.claude.mode, 'acceptEdits');
     assert.deepEqual(connectors.agents.codex.command, ['codex']);
     assert.equal(connectors.agents.codex.mode, 'workspace-write');
+    assert.deepEqual(connectors.agents.opencode.command, ['opencode']);
+    assert.equal(connectors.agents.opencode.mode, 'default');
+    assert.deepEqual(connectors.agents.grok.command, ['grok']);
+    assert.equal(connectors.agents.grok.mode, 'acceptEdits');
     assert.equal(connectors.timeoutMs, 900_000);
     assert.equal(connectors.limit, 3);
   });
@@ -151,6 +157,37 @@ describe('the command each agent is given', () => {
       'exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', 'add a retry',
     ]);
   });
+
+  it('runs opencode through run, with the task last and JSON events back', () => {
+    const args = AGENTS.opencode.args({
+      task: 'add a retry', model: 'anthropic/claude-sonnet-4', mode: 'default', extra: [], cwd: '/repo',
+    });
+    assert.deepEqual(args, [
+      'run', '--format', 'json', '--dir', '/repo', '--model', 'anthropic/claude-sonnet-4', 'add a retry',
+    ]);
+  });
+
+  it('only waves opencode’s approvals through when the mode says so', () => {
+    const asked = AGENTS.opencode.args({ task: 'add a retry', model: '', mode: 'default', extra: [] });
+    assert.equal(asked.includes('--auto'), false);
+
+    const auto = AGENTS.opencode.args({ task: 'add a retry', model: '', mode: 'auto', extra: [] });
+    assert.ok(auto.includes('--auto'));
+  });
+
+  it('runs grok headless, with JSON back and a permission mode', () => {
+    const args = AGENTS.grok.args({
+      task: 'add a retry', model: 'grok-build', mode: 'acceptEdits', extra: ['--max-turns', '20'], cwd: '/repo',
+    });
+    assert.deepEqual(args, [
+      '-p', 'add a retry',
+      '--output-format', 'json',
+      '--cwd', '/repo',
+      '--permission-mode', 'acceptEdits',
+      '--model', 'grok-build',
+      '--max-turns', '20',
+    ]);
+  });
 });
 
 describe('reading what an agent printed', () => {
@@ -181,9 +218,31 @@ describe('reading what an agent printed', () => {
     assert.deepEqual(AGENTS.codex.parse(typed, ''), { summary: 'tests pass' });
   });
 
+  it('takes the last text part opencode printed, past the tools it ran', () => {
+    const stdout = [
+      '{"type":"step_start","sessionID":"s","part":{"type":"step-start"}}',
+      '{"type":"tool_use","sessionID":"s","part":{"type":"tool","tool":"edit"}}',
+      '{"type":"text","sessionID":"s","part":{"type":"text","text":"reading the file"}}',
+      '{"type":"text","sessionID":"s","part":{"type":"text","text":"tests pass"}}',
+    ].join('\n');
+    assert.deepEqual(AGENTS.opencode.parse(stdout, ''), { summary: 'tests pass' });
+  });
+
+  it('takes grok’s text out of the one object it prints at the end', () => {
+    const stdout = JSON.stringify({ text: 'four files changed', stopReason: 'end_turn', sessionId: 'abc' });
+    assert.deepEqual(AGENTS.grok.parse(stdout, ''), { summary: 'four files changed' });
+  });
+
+  it('treats grok’s error object as a failure', () => {
+    const stdout = '{"type":"error","message":"Couldn\'t start session"}';
+    assert.deepEqual(AGENTS.grok.parse(stdout, ''), { error: "Couldn't start session" });
+  });
+
   it('keeps the plain output when neither shape is there', () => {
     assert.deepEqual(AGENTS.claude.parse('done, I think\n', ''), { summary: 'done, I think' });
     assert.deepEqual(AGENTS.codex.parse('', 'no such model'), { summary: 'no such model' });
+    assert.deepEqual(AGENTS.opencode.parse('done, I think\n', ''), { summary: 'done, I think' });
+    assert.deepEqual(AGENTS.grok.parse('', 'no such model'), { summary: 'no such model' });
   });
 });
 
@@ -196,6 +255,7 @@ describe('what the session is told', () => {
 
   it('names the agents it actually has, and what is already running', () => {
     assert.match(connectorBlock(['claude', 'codex']), /Claude Code and Codex/);
+    assert.match(connectorBlock(['claude', 'opencode', 'grok']), /Claude Code, OpenCode and Grok Build/);
     assert.match(connectorBlock(['claude']), /dispatch_task/);
 
     const block = tasksBlock([
@@ -597,6 +657,50 @@ describe('where an agent actually works', () => {
     });
     assert.deepEqual(args.slice(0, 4), ['exec', '--json', '--cd', '/work']);
   });
+
+  it('hands opencode and grok theirs the same way', () => {
+    const open = AGENTS.opencode.args({ task: 'go', model: '', mode: 'default', extra: [], cwd: '/work' });
+    assert.deepEqual(open.slice(0, 5), ['run', '--format', 'json', '--dir', '/work']);
+
+    const grok = AGENTS.grok.args({ task: 'go', model: '', mode: '', extra: [], cwd: '/work' });
+    assert.deepEqual(grok.slice(0, 6), ['-p', 'go', '--output-format', 'json', '--cwd', '/work']);
+  });
+});
+
+describe('running the newer two end to end', () => {
+  /** One task, dispatched to a stand-in CLI, waited on until it settles. */
+  const dispatched = (name) => new Promise((done, failed) => {
+    const connectors = createConnectors(loadConfig({
+      CONNECTORS: name,
+      [`${name.toUpperCase()}_COMMAND`]: `node "${FAKE}" ${name}`,
+      CONNECTOR_FILE: scratchSettings(),
+    }));
+
+    const stop = connectors.watch((task) => {
+      if (task.status === 'running') return;
+      stop();
+      connectors.close();
+      done(task);
+    });
+
+    const started = connectors.run('dispatch_task', { task: 'add a retry', agent: name });
+    if (!started.ok) {
+      connectors.close();
+      failed(new Error(started.error));
+    }
+  });
+
+  it('reads what opencode said out of its event stream', async () => {
+    const task = await dispatched('opencode');
+    assert.equal(task.status, 'done');
+    assert.match(task.summary, /opencode did: add a retry/);
+  });
+
+  it('reads what grok said out of the object it ends with', async () => {
+    const task = await dispatched('grok');
+    assert.equal(task.status, 'done');
+    assert.match(task.summary, /grok did: add a retry/);
+  });
 });
 
 describe('setting the connectors up from the panel', () => {
@@ -620,10 +724,10 @@ describe('setting the connectors up from the panel', () => {
     await xai.close();
   });
 
-  it('opens with both agents known, both off, and no tools declared', async () => {
+  it('opens with every agent known, all off, and no tools declared', async () => {
     const body = await (await app.get('/api/connectors')).json();
-    assert.deepEqual(body.agents.map((a) => a.name), ['claude', 'codex']);
-    assert.deepEqual(body.agents.map((a) => a.enabled), [false, false]);
+    assert.deepEqual(body.agents.map((a) => a.name), ['claude', 'codex', 'opencode', 'grok']);
+    assert.deepEqual(body.agents.map((a) => a.enabled), [false, false, false, false]);
 
     const config = await (await app.get('/api/config')).json();
     assert.deepEqual(config.tools.connectors, []);
