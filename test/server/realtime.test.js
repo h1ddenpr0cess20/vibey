@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 
-import { sanitize } from '../../src/server/realtime.js';
+import { historyItem, priorTurns, sanitize } from '../../src/server/realtime.js';
 import { SYSTEM } from '../../src/server/persona.js';
 import { startApp, settle } from '../helpers/app.js';
 import { startXaiStub } from '../helpers/xai-stub.js';
@@ -65,6 +65,43 @@ describe('sanitize', () => {
       type: 'conversation.item.create',
       item: { type: 'message', role: 'assistant', content: [] },
     }), null);
+  });
+});
+
+describe('priorTurns', () => {
+  it('keeps only what two people said, trimmed', () => {
+    assert.deepEqual(priorTurns([
+      { role: 'user', content: '  hello  ' },
+      { role: 'assistant', content: 'Hello.' },
+      { role: 'system', content: 'you are a friendly assistant' },
+      { role: 'user', content: '   ' },
+      { role: 'user', content: 42 },
+      'not a turn',
+    ]), [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'Hello.' },
+    ]);
+  });
+
+  it('takes nothing at all from a page that sends nonsense', () => {
+    assert.deepEqual(priorTurns(undefined), []);
+    assert.deepEqual(priorTurns('a conversation'), []);
+  });
+
+  it('sheds the oldest to stay inside the budget the page cannot raise', () => {
+    const turns = priorTurns(Array.from({ length: 80 }, (_, i) => ({ role: 'user', content: `turn ${i}` })));
+    assert.equal(turns.length, 40);
+    assert.equal(turns.at(-1).content, 'turn 79');
+
+    const huge = priorTurns([{ role: 'user', content: 'x'.repeat(50_000) }]);
+    assert.equal(huge[0].content.length, 6000);
+  });
+});
+
+describe('historyItem', () => {
+  it('gives each role the content type the API takes for it', () => {
+    assert.equal(historyItem({ role: 'user', content: 'hi' }).item.content[0].type, 'input_text');
+    assert.equal(historyItem({ role: 'assistant', content: 'hi' }).item.content[0].type, 'output_text');
   });
 });
 
@@ -136,6 +173,98 @@ describe('the proxy', () => {
 
     const forwarded = xai.received().slice(before);
     assert.deepEqual(forwarded.map((f) => f.type), ['input_audio_buffer.append']);
+  });
+
+  describe('a conversation picked back up', () => {
+    const turns = [
+      { role: 'user', content: 'what should I build?' },
+      { role: 'assistant', content: 'The small one. Ship it.' },
+    ];
+
+    it('lays the turns down as items, after the persona and before the audio', async () => {
+      const client = await app.openSocket();
+      const before = xai.received().length;
+
+      client.send({ type: 'session.history', turns });
+      client.send({ type: 'input_audio_buffer.append', audio: 'CCCCCCCC' });
+
+      await client.waitFor('proxy.ready');
+      await settle();
+
+      const forwarded = xai.received().slice(before);
+      assert.equal(forwarded[0].type, 'session.update', 'the persona goes first');
+      assert.deepEqual(forwarded.slice(1, 3), [
+        {
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            status: 'completed',
+            content: [{ type: 'input_text', text: 'what should I build?' }],
+          },
+        },
+        {
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'assistant',
+            status: 'completed',
+            content: [{ type: 'output_text', text: 'The small one. Ship it.' }],
+          },
+        },
+      ]);
+      assert.equal(forwarded.at(-1).audio, 'CCCCCCCC', 'what was said in the new call comes last');
+    });
+
+    it('tells the model those turns are an earlier conversation', async () => {
+      const client = await app.openSocket();
+      const before = xai.received().length;
+
+      client.send({ type: 'session.history', turns });
+      await client.waitFor('proxy.ready');
+      await settle();
+
+      const [update] = xai.received().slice(before);
+      assert.match(update.session.instructions, /happened earlier/);
+      assert.ok(update.session.instructions.startsWith(SYSTEM), 'the persona is still first');
+    });
+
+    it('says nothing of the sort on a call that was not picked up', async () => {
+      const client = await app.openSocket();
+      const before = xai.received().length;
+
+      await client.waitFor('proxy.ready');
+      await settle();
+
+      const forwarded = xai.received().slice(before);
+      assert.deepEqual(forwarded.map((f) => f.type), ['session.update']);
+      assert.doesNotMatch(forwarded[0].session.instructions, /happened earlier/);
+    });
+
+    it('will not be handed a second conversation mid-call', async () => {
+      const client = await app.openSocket();
+      client.send({ type: 'session.history', turns });
+      await client.waitFor('proxy.ready');
+      await settle();
+      const before = xai.received().length;
+
+      client.send({ type: 'session.history', turns: [{ role: 'user', content: 'a different one' }] });
+      await settle();
+
+      assert.deepEqual(xai.received().slice(before), []);
+    });
+
+    it('never forwards the frame itself', async () => {
+      const client = await app.openSocket();
+      const before = xai.received().length;
+
+      client.send({ type: 'session.history', turns });
+      await client.waitFor('proxy.ready');
+      await settle();
+
+      const forwarded = xai.received().slice(before);
+      assert.equal(forwarded.some((f) => f.type === 'session.history'), false);
+    });
   });
 
   it('queues frames sent before xAI has answered the handshake', async () => {

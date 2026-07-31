@@ -7,6 +7,7 @@ import {
   SYSTEM,
   buildTools,
   memoryBlock,
+  resumedBlock,
   sessionConfig,
 } from '../../src/server/persona.js';
 
@@ -48,6 +49,33 @@ describe('the session config', () => {
 
   it('is the persona alone with no memories', () => {
     assert.equal(sessionConfig({ voice: 'rex', tools: [] }).instructions, SYSTEM);
+  });
+});
+
+describe('the resumed block', () => {
+  it('is nothing at all on a call that was not picked up', () => {
+    assert.equal(resumedBlock(false), '');
+    assert.equal(resumedBlock(undefined), '');
+  });
+
+  it('says the turns ahead of the call are an earlier one', () => {
+    assert.match(resumedBlock(true), /happened earlier/);
+  });
+
+  it('rides behind the persona and the memories, never in place of them', () => {
+    const config = sessionConfig({
+      voice: 'leo',
+      tools: [],
+      memories: ['takes the stairs'],
+      resumed: true,
+    });
+
+    assert.ok(config.instructions.startsWith(SYSTEM));
+    assert.match(config.instructions, /takes the stairs/);
+    assert.match(config.instructions, /happened earlier/);
+    assert.ok(
+      config.instructions.indexOf('takes the stairs') < config.instructions.indexOf('happened earlier'),
+    );
   });
 });
 

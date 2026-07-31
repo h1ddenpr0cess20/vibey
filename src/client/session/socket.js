@@ -10,7 +10,7 @@ function socketUrl({ voice, model }) {
   return url;
 }
 
-export function connect({ voice, model, agent, memories = [], onEvent, onClose }) {
+export function connect({ voice, model, agent, memories = [], history = [], onEvent, onClose }) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(socketUrl({ voice, model }));
     let settled = false;
@@ -27,6 +27,8 @@ export function connect({ voice, model, agent, memories = [], onEvent, onClose }
       settled = true;
       clearTimeout(timer);
       if (memories.length) ws.send(JSON.stringify({ type: 'session.memory', memories }));
+      /** Ahead of any audio, so the proxy has it before the call is under way. */
+      if (history.length) ws.send(JSON.stringify({ type: 'session.history', turns: history }));
       if (agent) ws.send(JSON.stringify({ type: 'session.agent', agent }));
       resolve({
         get open() {

@@ -82,10 +82,22 @@ life of the page rather than failing the call.
 
 Old turns are not replayed into a new call on their own — that would make the
 log a memory rather than a record. `continue` on an entry in the log is the one
-way past that, and it is asked for, once, per conversation: the stored turns go
-up as a single item in the person's own voice, which is the only item the proxy
-forwards, so picking a conversation back up still cannot reach the persona or
-the instructions.
+way past that, and it is asked for, once, per conversation.
+
+What goes up then is the conversation itself, not a description of one. The page
+sends `session.history` — its own frame, handled here and never forwarded — and
+the proxy lays the turns back down upstream as items, one `conversation.item.create`
+each: a user message carrying `input_text`, an assistant message carrying
+`output_text`. That is the shape the realtime API takes for history, and it is
+the only shape that works. Flattening a transcript into a single message leaves
+the model with no history at all, only somebody telling it about one — it will
+treat the first thing said in the new call as the first thing ever said.
+
+The turns arrive as turns rather than as items so the page never names a role:
+it hands over what was said, and `realtime.js` decides what goes upstream. The
+line explaining that those turns are an earlier conversation is part of the
+instructions, so it stays server-side with the rest of the persona. Both ends
+cap the replay at 40 turns and 6 KB, oldest shed first.
 
 Memory is capped at 50 lines, each flattened to one line and cut at 600
 characters; past the cap the oldest goes. `remember` and `forget` run in the
@@ -163,7 +175,7 @@ src/
       environment.js      Warm studio env map for the transmissive shell
     session/            The call. Emits transport-agnostic events
       index.js            Lifecycle: mic, socket, meter, tear down
-      socket.js           The WebSocket to our own proxy
+      socket.js           The WebSocket to our own proxy, memories and history
       audio.js            Capture and playback over Web Audio
       codec.js            PCM16 ↔ base64
       events.js           xAI server events → this vocabulary

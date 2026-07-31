@@ -16,35 +16,33 @@ const MIC_CONSTRAINTS = {
 };
 
 /** How much of an earlier conversation rides along when one is picked up. */
-const RECAP_TURNS = 40;
-const RECAP_CHARS = 6000;
-
-const RECAP_HEAD = '[Picking up a conversation from earlier. What follows is what was'
-  + ' said in it, oldest first — context to carry on from, not something to read'
-  + ' back or to answer. Take it as already known: they are not a stranger.]';
+const PRIOR_TURNS = 40;
+const PRIOR_CHARS = 6000;
 
 /**
- * An earlier conversation, folded into one turn the model reads before anyone
- * says anything. It goes over as the person's own message because that is the
- * only item the proxy will pass on — the persona and the instructions stay
- * server-side, and a page cannot reach either.
+ * The turns of an earlier conversation, trimmed to what is worth carrying and
+ * cut down to the two roles a conversation has. They travel as turns rather
+ * than as a summary of turns, because that is what the realtime API takes: one
+ * `conversation.item.create` each, a user message holding `input_text` and an
+ * assistant message holding `output_text`. Describing the history inside a
+ * single message instead leaves the model with no history at all — only
+ * somebody telling it about one.
  *
- * The oldest lines go first when there are too many: what was said last is
- * what the next sentence is most likely to follow from.
+ * The oldest go first when there are too many: what was said last is what the
+ * next sentence is most likely to follow from.
  */
-export function recap(turns = []) {
-  const lines = turns
+export function prior(turns = []) {
+  const kept = turns
     .filter((turn) => turn?.content && (turn.role === 'user' || turn.role === 'assistant'))
-    .slice(-RECAP_TURNS)
-    .map((turn) => `${turn.role === 'user' ? 'Them' : 'You'}: ${turn.content}`);
+    .slice(-PRIOR_TURNS)
+    .map((turn) => ({ role: turn.role, content: String(turn.content).slice(0, PRIOR_CHARS) }));
 
-  let body = lines.join('\n');
-  while (body.length > RECAP_CHARS && lines.length > 1) {
-    lines.shift();
-    body = lines.join('\n');
+  let total = kept.reduce((sum, turn) => sum + turn.content.length, 0);
+  while (total > PRIOR_CHARS && kept.length > 1) {
+    total -= kept.shift().content.length;
   }
 
-  return lines.length ? `${RECAP_HEAD}\n\n${body.slice(-RECAP_CHARS)}` : '';
+  return kept;
 }
 
 function micUnavailable() {
@@ -166,6 +164,7 @@ export function createVoiceSession({ model, voice, agent, memory } = {}) {
         model: currentModel,
         agent: currentAgent,
         memories: memory?.lines() ?? [],
+        history: prior(context),
         onEvent: events.handle,
         onClose: (reason) => {
           if (!call) return;
@@ -174,15 +173,6 @@ export function createVoiceSession({ model, voice, agent, memory } = {}) {
         },
       });
       if (abandoned()) return stop();
-
-      /** No `response.create` behind it: the recap is read, not answered. */
-      const earlier = recap(context);
-      if (earlier) {
-        call.send({
-          type: 'conversation.item.create',
-          item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: earlier }] },
-        });
-      }
 
       capture = await createCapture(audio.ctx, micStream, (samples) => {
         if (muted) return;
