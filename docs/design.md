@@ -80,9 +80,34 @@ The last 40 conversations are kept, and the oldest are shed to stay inside a
 hands back a store that throws on write, so the log falls back to memory for the
 life of the page rather than failing the call.
 
-Old turns are not replayed into a new call. That would make the log a memory
-rather than a record, and `session.tools` has no path for it that doesn't also
-let the page rewrite the persona.
+Old turns are not replayed into a new call on their own — that would make the
+log a memory rather than a record. `continue` on an entry in the log is the one
+way past that, and it is asked for, once, per conversation.
+
+What goes up then is the conversation itself, not a description of one. The page
+sends `session.history` — its own frame, handled here and never forwarded — and
+the proxy lays the turns back down upstream as items, one `conversation.item.create`
+each: a user message carrying `input_text`, an assistant message carrying
+`output_text`. That is the shape the realtime API takes for history, and it is
+the only shape that works. Flattening a transcript into a single message leaves
+the model with no history at all, only somebody telling it about one — it will
+treat the first thing said in the new call as the first thing ever said.
+
+Both roles carry `input_text`. xAI documents history seeding with a user text
+message or an assistant text message and `input_text` as the content type for a
+text message either way — it follows OpenAI's beta naming here, the same way it
+does for the text events `events.js` has to handle two spellings of. OpenAI's GA
+shape puts assistant text in `output_text`; that is not this API.
+
+The turns arrive as turns rather than as items so the page never names a role:
+it hands over what was said, and `realtime.js` decides what goes upstream. The
+line explaining that those turns are an earlier conversation is part of the
+instructions, so it stays server-side with the rest of the persona.
+
+Both ends cap the replay at 40 turns and 6 KB, oldest shed first, and the cap is
+a bill as well as a budget: xAI charges per `conversation.item.create` the client
+sends, so a picked-up conversation costs its turns, once, at the moment it is
+picked up. Lowering the cap lowers that; it is one constant at each end.
 
 Memory is capped at 50 lines, each flattened to one line and cut at 600
 characters; past the cap the oldest goes. `remember` and `forget` run in the
@@ -150,7 +175,7 @@ src/
     styles.css          The HUD around the star
     api.js              The HTTP API, as functions
     tasks.js            What the agents are working on, mirrored in the page
-    history.js          Past conversations, in localStorage
+    history.js          Past conversations in localStorage, and picking one up
     memory.js           What it remembers between calls, in localStorage
     star/               Geometry and animation. Knows nothing about transports
       index.js            The controller, the throw, and the per-frame loop
@@ -160,7 +185,7 @@ src/
       environment.js      Warm studio env map for the transmissive shell
     session/            The call. Emits transport-agnostic events
       index.js            Lifecycle: mic, socket, meter, tear down
-      socket.js           The WebSocket to our own proxy
+      socket.js           The WebSocket to our own proxy, memories and history
       audio.js            Capture and playback over Web Audio
       codec.js            PCM16 ↔ base64
       events.js           xAI server events → this vocabulary
@@ -170,10 +195,10 @@ src/
       constants.js        The wire format, shared with the server
     ui/
       hud.js              Status chip, transcript, caption, tool label
-      history.js          The log panel behind the `log` button
+      history.js          The log panel behind `log`, and its `continue`
       memory.js           The memory panel behind the `memory` button
       connectors.js       Agent setup and the work, behind the `connectors` button
-      controls.js         Mic, text field, send, pickers
+      controls.js         Mic (tap mutes, hold hangs up), field, send, pickers
       viewport.js         Keeps the composer above the on-screen keyboard
       stage.js            Strips the starter component's own chrome
     vendor/
@@ -223,8 +248,8 @@ push the star into the middle distance.
 ## The transport seam
 
 `session/index.js` exposes `on`, `start`, `stop`, `send`, `cancel`, `syncMemory`,
-`messages`, `connected`, `busy`, `stale`, `state`, `muted`, `model`, `voice` —
-and emits:
+`messages`, `context`, `connected`, `busy`, `stale`, `state`, `muted`, `model`,
+`voice` — and emits:
 
 ```
 'state'        listening | thinking | speaking | idle

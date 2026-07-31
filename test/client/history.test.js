@@ -90,6 +90,81 @@ describe('recording', () => {
   });
 });
 
+describe('picking one back up', () => {
+  function stored() {
+    const { history, storage } = harness();
+    history.begin({ voice: 'leo' });
+    history.append({ role: 'user', content: 'what should I build?' });
+    history.append({ role: 'assistant', content: 'The small one. Ship it.' });
+    const [{ id }] = history.conversations;
+    history.end();
+    history.begin({ voice: 'rex' });
+    history.append({ role: 'user', content: 'later' });
+    history.end();
+    return { history, storage, id };
+  }
+
+  it('hands back what was said in the one it reopens', () => {
+    const { history, id } = stored();
+    const earlier = history.resume(id);
+
+    assert.equal(earlier.id, id);
+    assert.deepEqual(earlier.messages.map((m) => m.content), ['what should I build?', 'The small one. Ship it.']);
+  });
+
+  it('appends what is said next to that conversation, not a new one', () => {
+    const { history, id } = stored();
+    history.resume(id);
+    history.append({ role: 'user', content: 'and now?' });
+
+    assert.equal(history.live, id);
+    assert.equal(history.conversations.length, 2);
+    assert.deepEqual(history.conversations[0].messages.map((m) => m.content), [
+      'what should I build?',
+      'The small one. Ship it.',
+      'and now?',
+    ]);
+  });
+
+  it('moves it to the top, where the live conversation belongs', () => {
+    const { history, id } = stored();
+    assert.deepEqual(history.conversations.map((c) => c.voice), ['rex', 'leo']);
+    history.resume(id);
+    assert.deepEqual(history.conversations.map((c) => c.voice), ['leo', 'rex']);
+  });
+
+  it('closes the conversation it was in first', () => {
+    const { history, id } = stored();
+    history.begin({ voice: 'atlas' });
+    history.append({ role: 'user', content: 'wait' });
+    history.resume(id);
+
+    assert.equal(history.live, id);
+    assert.equal(history.conversations.filter((c) => c.voice === 'atlas').length, 1);
+  });
+
+  it('survives the page: the reopened order is what was written', () => {
+    const { history, storage, id } = stored();
+    history.resume(id);
+    const written = JSON.parse(storage.getItem(KEY));
+    assert.equal(written.conversations[0].id, id);
+  });
+
+  it('says no to an id it does not have, and leaves the log alone', () => {
+    const { history, id } = stored();
+    history.begin({ voice: 'atlas' });
+    assert.equal(history.resume('nope'), null);
+    assert.notEqual(history.live, id);
+  });
+
+  it('hands out turns the caller cannot edit from under us', () => {
+    const { history, id } = stored();
+    const earlier = history.resume(id);
+    earlier.messages.push({ role: 'user', content: 'forged' });
+    assert.equal(history.conversations[0].messages.length, 2);
+  });
+});
+
 describe('what a coding agent sent back', () => {
   it('goes in the log as its own kind of turn, beside the talking', () => {
     const { history } = harness();

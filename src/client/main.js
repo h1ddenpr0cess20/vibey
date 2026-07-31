@@ -24,7 +24,7 @@ const memory = createMemory();
 const session = createVoiceSession({ memory });
 const hud = createHud();
 const history = createHistory();
-const historyPanel = createHistoryPanel({ history, onNew: startFresh });
+const historyPanel = createHistoryPanel({ history, onNew: startFresh, onResume: pickUp });
 const memoryPanel = createMemoryPanel({ memory, onChange: () => session.syncMemory() });
 const board = createTaskBoard();
 const connectorsPanel = createConnectorsPanel({
@@ -50,9 +50,15 @@ const controls = createControls({
     }
     hud.setState('connecting');
     hud.clearCaption();
-    history.begin({ model: session.model, voice: session.voice });
+    /** A conversation picked up in the log is already open: this joins it. */
+    if (!history.live) history.begin({ model: session.model, voice: session.voice });
     await session.start();
     if (session.stale) setTimeout(redial, 0);
+  },
+
+  /** Held down rather than tapped: end the call instead of muting it. */
+  onHangUp() {
+    session.stop();
   },
 
   onSubmit(text) {
@@ -102,7 +108,21 @@ function armIdleMute() {
 
 function startFresh() {
   history.end();
+  session.context = [];
   if (session.connected) redial();
+}
+
+/**
+ * Carries on an old conversation. Whatever call is up ends first — this is a
+ * different conversation, and the model is handed the stored turns as it dials
+ * — and from here what is said lands back in that same entry in the log.
+ */
+async function pickUp(id) {
+  if (session.connected) session.stop();
+  const earlier = history.resume(id);
+  if (!earlier) return;
+  session.context = earlier.messages;
+  await controls.toggleMic();
 }
 
 function chipState() {
@@ -110,9 +130,17 @@ function chipState() {
   return star.state === 'listening' || star.state === 'idle' ? 'muted' : star.state;
 }
 
+/**
+ * A new call for the same conversation, after a pick or a stale one. Where the
+ * conversation was picked up out of the log it stays picked up, turns and all,
+ * including the ones from the call being replaced — a voice is worth changing
+ * mid-sentence, and losing the thread over it is not.
+ */
 function redial() {
   if (!session.connected) return;
+  const thread = session.context.length ? history.live : null;
   session.stop();
+  if (thread) session.context = history.resume(thread)?.messages ?? [];
   controls.toggleMic();
 }
 

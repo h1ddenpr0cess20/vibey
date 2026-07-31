@@ -15,6 +15,36 @@ const MIC_CONSTRAINTS = {
   },
 };
 
+/** How much of an earlier conversation rides along when one is picked up. */
+const PRIOR_TURNS = 40;
+const PRIOR_CHARS = 6000;
+
+/**
+ * The turns of an earlier conversation, trimmed to what is worth carrying and
+ * cut down to the two roles a conversation has. They travel as turns rather
+ * than as a summary of turns, because that is what the realtime API takes: one
+ * `conversation.item.create` each, a user message holding `input_text` and an
+ * assistant message holding `output_text`. Describing the history inside a
+ * single message instead leaves the model with no history at all — only
+ * somebody telling it about one.
+ *
+ * The oldest go first when there are too many: what was said last is what the
+ * next sentence is most likely to follow from.
+ */
+export function prior(turns = []) {
+  const kept = turns
+    .filter((turn) => turn?.content && (turn.role === 'user' || turn.role === 'assistant'))
+    .slice(-PRIOR_TURNS)
+    .map((turn) => ({ role: turn.role, content: String(turn.content).slice(0, PRIOR_CHARS) }));
+
+  let total = kept.reduce((sum, turn) => sum + turn.content.length, 0);
+  while (total > PRIOR_CHARS && kept.length > 1) {
+    total -= kept.shift().content.length;
+  }
+
+  return kept;
+}
+
 function micUnavailable() {
   if (navigator.mediaDevices?.getUserMedia) return null;
   return globalThis.isSecureContext === false
@@ -39,6 +69,7 @@ export function createVoiceSession({ model, voice, agent, memory } = {}) {
   let micAnalyser = null;
 
   let state = 'idle';
+  let context = [];
   let muted = false;
   let connecting = false;
   let generation = 0;
@@ -133,6 +164,7 @@ export function createVoiceSession({ model, voice, agent, memory } = {}) {
         model: currentModel,
         agent: currentAgent,
         memories: memory?.lines() ?? [],
+        history: prior(context),
         onEvent: events.handle,
         onClose: (reason) => {
           if (!call) return;
@@ -200,6 +232,17 @@ export function createVoiceSession({ model, voice, agent, memory } = {}) {
     send,
     get messages() {
       return messages;
+    },
+    /**
+     * The turns of a conversation being picked up again. They are handed over
+     * on the next dial rather than now — there may be no call yet, and this is
+     * what a redial re-sends, so a voice change mid-conversation keeps it.
+     */
+    get context() {
+      return context;
+    },
+    set context(turns) {
+      context = Array.isArray(turns) ? turns : [];
     },
     /** Hands the current memories to a call already in progress. */
     syncMemory() {

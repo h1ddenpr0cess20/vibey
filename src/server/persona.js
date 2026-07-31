@@ -139,12 +139,26 @@ export function memoryBlock(memories) {
   return `\n\nThings you have been told to remember about the person you are talking to. Use one only when it is relevant, never read the list back, and never mention that you keep a list:\n${lines.map((line) => `- ${line}`).join('\n')}`;
 }
 
+/**
+ * What the turns ahead of a resumed call are. The items themselves carry the
+ * conversation; this is the line that tells the model they are not this one.
+ */
+export function resumedBlock(resumed) {
+  if (!resumed) return '';
+
+  return '\n\nThe conversation before this point happened earlier, with the same'
+    + ' person, and they have just come back to carry it on. Take it as said and'
+    + ' pick up from it: no greeting them as a stranger, no summarising it back at'
+    + ' them, and no remarking on the gap unless they do.';
+}
+
 export const AUDIO_RATE = 24_000;
 
-export function sessionConfig({ voice, tools, memories, agents, tasks }) {
+export function sessionConfig({ voice, tools, memories, agents, tasks, resumed }) {
   return {
     voice,
-    instructions: SYSTEM + memoryBlock(memories) + connectorBlock(agents) + tasksBlock(tasks),
+    instructions: SYSTEM + memoryBlock(memories) + connectorBlock(agents)
+      + tasksBlock(tasks) + resumedBlock(resumed),
     reasoning: { effort: 'none' },
     turn_detection: {
       type: 'server_vad',
