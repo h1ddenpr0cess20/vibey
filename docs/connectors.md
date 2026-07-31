@@ -1,14 +1,17 @@
 # Connectors
 
-A connector is a coding agent this server may hand a task to. Two are wired:
+A connector is a coding agent this server may hand a task to. Four are wired:
 
 | | Run as |
 |---|---|
 | **Claude Code** | `claude -p <task> --output-format json --permission-mode acceptEdits` |
 | **Codex** | `codex exec --json --cd <workspace> --sandbox workspace-write <task>` |
+| **OpenCode** | `opencode run --format json --dir <workspace> <task>` |
+| **Grok Build** | `grok -p <task> --output-format json --cwd <workspace> --permission-mode acceptEdits` |
 
-Both are off until you switch one on, because both edit files on the machine the
-server is running on. That happens in the **connectors** panel, not in a file:
+All are off until you switch one on, because all of them edit files on the
+machine the server is running on. That happens in the **connectors** panel, not
+in a file:
 
 ```
 connectors                                    save   close
@@ -19,6 +22,12 @@ connectors                                    save   close
 
   [off] Codex                                          codex
         mode workspace-write   model —   workspace —
+
+  [off] OpenCode                                    opencode
+        mode default   model —   workspace —
+
+  [off] Grok Build                                      grok
+        mode acceptEdits   model —   workspace —
 ```
 
 Switch an agent on, point the workspace at the repo you want worked on, pick how
@@ -63,34 +72,41 @@ summary it printed at the end.
 ## From the environment
 
 `.env` sets the defaults for a fresh machine — `CONNECTORS=claude,codex` starts
-with those on — and owns the two things the panel deliberately cannot touch:
+with those on — and owns the two things the panel deliberately cannot touch.
+`<AGENT>` below is `CLAUDE`, `CODEX`, `OPENCODE` or `GROK`:
 
 | | |
 |---|---|
-| `CLAUDE_COMMAND`, `CODEX_COMMAND` | **Panel-proof.** A whole command line, so the CLI can be wrapped — `npx claude`, `docker exec -w /work dev codex`. The flags above are appended to it. Which binary this server executes is not something a browser gets to choose. |
-| `CLAUDE_ARGS`, `CODEX_ARGS` | Anything else, split like a shell would. Also panel-proof. |
+| `<AGENT>_COMMAND` | **Panel-proof.** A whole command line, so the CLI can be wrapped — `npx claude`, `docker exec -w /work dev codex`. The flags above are appended to it. Which binary this server executes is not something a browser gets to choose. |
+| `<AGENT>_ARGS` | Anything else, split like a shell would. Also panel-proof. |
 | `CONNECTOR_FILE` | Where the panel saves. `connectors.json` by default. |
-| `CLAUDE_MODEL`, `CODEX_MODEL` | Starting value for the model field. |
+| `<AGENT>_MODEL` | Starting value for the model field. OpenCode wants `provider/model`. |
 | `CLAUDE_PERMISSION_MODE` | `plan`, `acceptEdits` (default), `bypassPermissions` — and the rest the CLI publishes. |
 | `CODEX_SANDBOX` | `read-only`, `workspace-write` (default), `danger-full-access`. |
-| `CLAUDE_CWD`, `CODEX_CWD` | A different workspace for that one agent. |
+| `OPENCODE_PERMISSION_MODE` | `default`, or `auto` to approve what would otherwise be asked. |
+| `GROK_PERMISSION_MODE` | `plan`, `default`, `acceptEdits` (default), `auto`, `dontAsk`, `bypassPermissions`. |
+| `<AGENT>_CWD` | A different workspace for that one agent. |
 
 An agent switched on from the panel starts in the mode that lets it finish a
-task inside the workspace and nothing wider. Both CLIs have a mode that turns
-the rest of the guardrails off; the panel says so in red next to the choice, and
-a voice interface is a poor place to be casual about which one is on.
+task inside the workspace and nothing wider. Each CLI has a mode that turns the
+rest of the guardrails off; the panel says so in red next to the choice, and a
+voice interface is a poor place to be casual about which one is on. OpenCode is
+the odd one out: its rules live in its own config rather than in a mode, and a
+run that isn't interactive rejects whatever they leave open to ask — `auto` is
+the flag that waves those through.
 
 Each CLI's machine-readable output has already changed shape at least once, so
 the parsers take what they know — Claude's `result`, Codex's last
-`agent_message` — and fall back to the tail of what was actually printed rather
-than failing a task over a renamed field. A non-zero exit is a failure, and the
-last of stderr rides back with it.
+`agent_message`, OpenCode's last text part, Grok's `text` — and fall back to the
+tail of what was actually printed rather than failing a task over a renamed
+field. A non-zero exit is a failure, and the last of stderr rides back with it.
 
 The workspace is resolved once, when the task is dispatched, and recorded on the
 task itself — the panel and the log show where it ran rather than leaving you to
-ask the agent, which answers from inside whatever sandbox it runs in. Codex is
-handed it as `--cd` rather than by inheritance, and `PWD` is rewritten in the
-child's environment, which `spawn` does not do on its own.
+ask the agent, which answers from inside whatever sandbox it runs in. The three
+that take a directory flag are handed it that way — `--cd`, `--dir`, `--cwd` —
+rather than by inheritance, and `PWD` is rewritten in the child's environment,
+which `spawn` does not do on its own.
 
 Star is told, in the prompt, that this edits real files: read the task back
 before dispatching, get a plain yes for anything that doesn't come back, and

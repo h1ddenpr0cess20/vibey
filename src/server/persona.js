@@ -89,7 +89,10 @@ export function buildTools({ webSearch, xSearch, code, memory, connectors, mcpSe
 export function connectorBlock(agents) {
   if (!agents?.length) return '';
 
-  const roster = agents.map((name) => agentLabel(name)).join(' and ');
+  const labels = agents.map((name) => agentLabel(name));
+  const roster = labels.length > 1
+    ? `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+    : labels[0];
 
   return `\n\nYou can hand work to ${roster}, running on this machine, in the workspace:
 - dispatch_task gives one agent one task and comes straight back with a number. The work carries on after that, so don't wait on it, don't narrate it, and don't say anything about how it went — you don't know yet.

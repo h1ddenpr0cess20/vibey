@@ -12,7 +12,7 @@ Both `npm run dev` and `npm start` read `.env`.
 | `XAI_X_SEARCH` | `true` | |
 | `XAI_CODE_INTERPRETER` | `true` | Python in xAI's sandbox |
 | `MEMORY` | `true` | The `remember` and `forget` tools, and the memory block in the prompt |
-| `CONNECTORS` | — | `claude`, `codex`, or both, on at first boot. After that the panel owns it — see [connectors](connectors.md) |
+| `CONNECTORS` | — | Any of `claude`, `codex`, `opencode`, `grok`, on at first boot. After that the panel owns it — see [connectors](connectors.md) |
 | `CONNECTOR_CWD` | where the server started | Starting value for the workspace |
 | `CONNECTOR_TIMEOUT` | `900` | Seconds one task may run before it is stopped |
 | `CONNECTOR_LIMIT` | `3` | Tasks running at once |

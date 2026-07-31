@@ -188,7 +188,7 @@ src/
     static.js           Hosting for dist/ — production only
     connectors/         The coding agents, and the work handed to them
       index.js            The three tools, and the tasks behind them
-      agents.js           Claude Code and Codex, as command lines and parsers
+      agents.js           the four CLIs, as command lines and parsers
       tasks.js            Spawn, watch, time out, kill
       tools.js            What the model is told it can dispatch
       settings.js         The setup the panel edits, validated and saved
