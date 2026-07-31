@@ -15,6 +15,9 @@ FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5173
+# The server binds to loopback on its own; inside a container that is nobody.
+# The published port is the boundary here, so bind wide and publish narrowly.
+ENV HOST=0.0.0.0
 
 # Production dependencies only. Generating a self-signed certificate pulls in a
 # devDependency, so the container serves HTTP and expects TLS to be terminated

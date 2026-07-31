@@ -16,7 +16,7 @@ function harness({ playing = false } = {}) {
 
   const events = createEventHandler({
     setState: (s) => states.push(s),
-    emit: (type, payload) => emitted.push({ type, payload }),
+    emit: (type, payload, ...rest) => emitted.push({ type, payload, rest }),
     fail: (message) => errors.push(message),
     play: (samples) => played.push(samples),
     flushAudio: () => {
@@ -184,6 +184,18 @@ describe('dispatched work', () => {
     const h = harness();
     h.events.handle({ type: 'task.update' });
     assert.deepEqual(h.emitted, []);
+  });
+
+  /** The board wants the catch-up a new call opens with; the log has it already. */
+  it('says which updates are the catch-up rather than something that just happened', () => {
+    const h = harness();
+    const task = { id: '1', agent: 'claude', status: 'done', task: 'add a retry' };
+
+    h.events.handle({ type: 'task.update', task, replay: true });
+    h.events.handle({ type: 'task.update', task });
+
+    const seen = h.emitted.filter((e) => e.type === 'task');
+    assert.deepEqual(seen.map((e) => e.rest), [[true], [false]]);
   });
 });
 

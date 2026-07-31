@@ -24,6 +24,10 @@ export const MEMORY_EVENT = 'session.memory';
 /**
  * The proxy's own frame down to the page: a task changed state. It carries a
  * status, never output — the page shows what is in flight and nothing else.
+ *
+ * A new call opens with one of these per task the server already had, so the
+ * board survives a redial. Those carry `replay`, because a task that finished
+ * two calls ago is not news and must not be logged a second time.
  */
 export const TASK_EVENT = 'task.update';
 
@@ -237,13 +241,19 @@ export function createRealtimeProxy(config, connectors = createConnectors(config
       for (const frame of pending) upstream.send(frame);
       pending = [];
       client.send(JSON.stringify({ type: 'proxy.ready', model, voice }));
-      for (const task of connectors.tasks()) tellPage({ type: TASK_EVENT, task });
+      for (const task of connectors.tasks()) tellPage({ type: TASK_EVENT, task, replay: true });
       flushNotes();
     });
 
+    /**
+     * INSPECT is the guard here, not whether a connector happens to be on: an
+     * agent switched off between the call going out and the frame arriving
+     * would otherwise leave that call unanswered, and the model waits forever
+     * on its own tool. `run` has a sentence for that case; a silence does not.
+     */
     upstream.on('message', (data, isBinary) => {
       if (client.readyState === WebSocket.OPEN) client.send(data, { binary: isBinary });
-      if (isBinary || !connectors.enabled) return;
+      if (isBinary) return;
       const text = data.toString();
       if (INSPECT.test(text)) inspect(text);
     });

@@ -546,9 +546,45 @@ describe('a task that outlives the call it came from', () => {
     const second = await app.openSocket();
     const replayed = await second.waitFor('task.update');
     assert.equal(replayed.task.status, 'running');
+    assert.equal(replayed.replay, true, 'and is marked as the catch-up it is');
 
     const update = xai.received().findLast((f) => f.type === 'session.update');
     assert.match(update.session.instructions, /sleep through the redial/);
+  });
+
+  /**
+   * The board is refilled from these, so they have to arrive whatever the
+   * status. The log is not: a task that finished two calls ago has already
+   * been written down, and the page only knows that because of the mark.
+   */
+  it('is marked as old news when it settled before the call opened', async () => {
+    const first = await app.openSocket();
+    await first.waitFor('proxy.ready');
+    xai.send({
+      type: 'response.output_item.done',
+      item: {
+        type: 'function_call',
+        call_id: 'd2',
+        name: 'dispatch_task',
+        arguments: JSON.stringify({ task: 'finish before the redial' }),
+      },
+    });
+    const done = await until(() => first.frames.find(
+      (f) => f.type === 'task.update' && f.task.status === 'done',
+    ));
+    assert.equal(done.replay, undefined, 'the one that actually happened is news');
+
+    first.ws.close();
+    await settle();
+
+    const second = await app.openSocket();
+    await second.waitFor('proxy.ready');
+    await settle();
+
+    const again = second.frames.filter((f) => f.type === 'task.update' && f.task.id === done.task.id);
+    assert.equal(again.length, 1);
+    assert.equal(again[0].task.status, 'done');
+    assert.equal(again[0].replay, true);
   });
 });
 
@@ -784,5 +820,35 @@ describe('setting the connectors up from the panel', () => {
 
     const body = await (await app.get('/api/connectors')).json();
     assert.equal(body.agents.find((a) => a.name === 'codex').command, 'codex');
+  });
+
+  /**
+   * The panel can switch the last agent off between a dispatch going out and
+   * the frame carrying it arriving. That call still has to come back with
+   * something: a model waiting on its own tool waits for the whole call.
+   */
+  it('still answers a call that arrives after the last agent went off', async () => {
+    const client = await app.openSocket();
+    await client.waitFor('proxy.ready');
+
+    assert.equal((await put({ agents: { codex: { enabled: false } } })).status, 200);
+    await settle();
+
+    xai.send({
+      type: 'response.output_item.done',
+      item: {
+        type: 'function_call',
+        call_id: 'gone',
+        name: 'dispatch_task',
+        arguments: JSON.stringify({ task: 'too late' }),
+      },
+    });
+
+    const answer = await until(() => xai.received().findLast(
+      (f) => f.item?.type === 'function_call_output' && f.item.call_id === 'gone',
+    ));
+    const output = JSON.parse(answer.item.output);
+    assert.equal(output.ok, false);
+    assert.match(output.error, /no coding agent is switched on/);
   });
 });

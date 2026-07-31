@@ -5,6 +5,7 @@ import { createApiMiddleware } from './src/server/api.js';
 import { loadConfig } from './src/server/config.js';
 import { createConnectors } from './src/server/connectors/index.js';
 import { REALTIME_PATH } from './src/server/app.js';
+import { refuseUpgrade, sameOrigin } from './src/server/origin.js';
 import { createRealtimeProxy } from './src/server/realtime.js';
 import { CERT_DIR } from './src/server/tls.js';
 
@@ -23,6 +24,9 @@ function icyApi(env) {
       server.httpServer?.on('close', () => connectors.close());
       server.httpServer?.on('upgrade', (req, socket, head) => {
         if (req.url.split('?')[0] !== REALTIME_PATH) return;
+        /** Same reason as in createApp: a WebSocket is not same-origin by
+         *  default, and this one dials on our key and spawns agents. */
+        if (!sameOrigin(req)) return refuseUpgrade(socket);
         realtime.handleUpgrade(req, socket, head);
       });
 
@@ -42,7 +46,10 @@ export default defineConfig(({ mode }) => {
     plugins: [icyApi(env), ...(lan ? [basicSsl({ certDir: CERT_DIR })] : [])],
     server: {
       port: Number(env.PORT) || 5173,
-      host: true,
+      /** This machine only, for the same reason `npm start` is: the connectors
+       *  edit real files and nothing here asks who you are. `dev:lan` passes
+       *  --host, which is that decision made on purpose. */
+      host: env.HOST || false,
     },
     resolve: {
       alias: { 'three/addons/': 'three/examples/jsm/' },

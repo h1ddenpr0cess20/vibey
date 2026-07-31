@@ -8,8 +8,8 @@ export function createEmitter() {
       return () => listeners.get(event).delete(fn);
     },
 
-    emit(event, payload) {
-      for (const fn of listeners.get(event) ?? []) fn(payload);
+    emit(event, ...payload) {
+      for (const fn of listeners.get(event) ?? []) fn(...payload);
     },
   };
 }
