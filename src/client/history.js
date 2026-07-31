@@ -126,10 +126,29 @@ export function createHistory({
     return closed;
   }
 
+  /**
+   * Opens a stored conversation back up, so what is said next lands in it
+   * instead of in a new entry. It moves to the top of the list on the way,
+   * where the one being talked in belongs.
+   */
+  function resume(id) {
+    const at = conversations.findIndex((c) => c.id === id);
+    if (at < 0) return null;
+
+    end();
+    open = conversations[at];
+    conversations.splice(at, 1);
+    conversations.unshift(open);
+    save();
+    changed();
+    return { ...open, messages: [...open.messages] };
+  }
+
   return {
     begin,
     append,
     end,
+    resume,
 
     get conversations() {
       return conversations.map((c) => ({ ...c, messages: [...c.messages] }));

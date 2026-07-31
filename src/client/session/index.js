@@ -15,6 +15,38 @@ const MIC_CONSTRAINTS = {
   },
 };
 
+/** How much of an earlier conversation rides along when one is picked up. */
+const RECAP_TURNS = 40;
+const RECAP_CHARS = 6000;
+
+const RECAP_HEAD = '[Picking up a conversation from earlier. What follows is what was'
+  + ' said in it, oldest first — context to carry on from, not something to read'
+  + ' back or to answer. Take it as already known: they are not a stranger.]';
+
+/**
+ * An earlier conversation, folded into one turn the model reads before anyone
+ * says anything. It goes over as the person's own message because that is the
+ * only item the proxy will pass on — the persona and the instructions stay
+ * server-side, and a page cannot reach either.
+ *
+ * The oldest lines go first when there are too many: what was said last is
+ * what the next sentence is most likely to follow from.
+ */
+export function recap(turns = []) {
+  const lines = turns
+    .filter((turn) => turn?.content && (turn.role === 'user' || turn.role === 'assistant'))
+    .slice(-RECAP_TURNS)
+    .map((turn) => `${turn.role === 'user' ? 'Them' : 'You'}: ${turn.content}`);
+
+  let body = lines.join('\n');
+  while (body.length > RECAP_CHARS && lines.length > 1) {
+    lines.shift();
+    body = lines.join('\n');
+  }
+
+  return lines.length ? `${RECAP_HEAD}\n\n${body.slice(-RECAP_CHARS)}` : '';
+}
+
 function micUnavailable() {
   if (navigator.mediaDevices?.getUserMedia) return null;
   return globalThis.isSecureContext === false
@@ -39,6 +71,7 @@ export function createVoiceSession({ model, voice, agent, memory } = {}) {
   let micAnalyser = null;
 
   let state = 'idle';
+  let context = [];
   let muted = false;
   let connecting = false;
   let generation = 0;
@@ -142,6 +175,15 @@ export function createVoiceSession({ model, voice, agent, memory } = {}) {
       });
       if (abandoned()) return stop();
 
+      /** No `response.create` behind it: the recap is read, not answered. */
+      const earlier = recap(context);
+      if (earlier) {
+        call.send({
+          type: 'conversation.item.create',
+          item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: earlier }] },
+        });
+      }
+
       capture = await createCapture(audio.ctx, micStream, (samples) => {
         if (muted) return;
         call?.send({ type: 'input_audio_buffer.append', audio: encodePCM(samples) });
@@ -200,6 +242,17 @@ export function createVoiceSession({ model, voice, agent, memory } = {}) {
     send,
     get messages() {
       return messages;
+    },
+    /**
+     * The turns of a conversation being picked up again. They are handed over
+     * on the next dial rather than now — there may be no call yet, and this is
+     * what a redial re-sends, so a voice change mid-conversation keeps it.
+     */
+    get context() {
+      return context;
+    },
+    set context(turns) {
+      context = Array.isArray(turns) ? turns : [];
     },
     /** Hands the current memories to a call already in progress. */
     syncMemory() {

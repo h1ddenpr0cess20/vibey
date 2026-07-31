@@ -190,6 +190,11 @@ three-d-stage {
   border: 0;
   color: rgba(245, 233, 220, .7);
   transition: background .25s, color .25s, box-shadow .25s, transform .1s;
+  /** It is held down as well as tapped: no callout, no selection, no zoom. */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 #mic:hover { background: rgba(245, 233, 220, .16); color: var(--ink); }
 #mic:active { transform: scale(.94); }
@@ -205,6 +210,22 @@ three-d-stage {
 #mic.muted:hover { opacity: .85; }
 #mic .slash { opacity: 0; }
 #mic.muted .slash { opacity: 1; }
+
+/**
+ * Held down, the hang-up arms: the ring closes over the same time the hold
+ * takes, so a press let go early reads as what it was — a tap, and a mute.
+ */
+#mic.holding {
+  transform: scale(.94);
+  animation: arming var(--hang, 650ms) linear forwards;
+}
+@keyframes arming {
+  from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 50%, transparent); }
+  to { box-shadow: 0 0 0 7px color-mix(in srgb, var(--error) 50%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #mic.holding { animation: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--error) 50%, transparent); }
+}
 #mic[data-busy], #mic:disabled { opacity: .5; cursor: default; }
 #mic svg { display: block; }
 
@@ -398,6 +419,25 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
 }
 #history .entry > header > * { white-space: nowrap; }
 #history .meta { color: rgba(245, 233, 220, .22); }
+
+#history .resume {
+  appearance: none;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(245, 233, 220, .06);
+  border: 0;
+  color: rgba(245, 233, 220, .6);
+  font: inherit;
+  transition: background .2s, color .2s;
+}
+#history .resume:hover { background: rgba(245, 233, 220, .14); color: var(--ink); }
+#history .resume:disabled {
+  background: none;
+  color: var(--listening);
+  cursor: default;
+}
 
 #history .turn {
   margin: 0 0 8px;
