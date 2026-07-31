@@ -8,6 +8,9 @@
   --stack: min(620px, 100%);
   --gutter: 24px;
   --keyboard-inset: 0px;
+  /* The list a native select drops down, which cannot inherit the page. */
+  --panel: #12121c;
+  --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0h8L4 5z' fill='rgba(245,233,220,.45)'/%3E%3C/svg%3E");
   --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -224,24 +227,28 @@ three-d-stage {
 #send:disabled { opacity: .3; cursor: default; }
 #send svg { display: block; }
 
-#model, #voice {
+#model, #voice, #agent {
   appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
   flex: none;
   max-width: 176px;
   padding: 9px 26px 9px 12px;
   border-radius: 4px;
-  background: rgba(245, 233, 220, .05) no-repeat right 11px center;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0h8L4 5z' fill='rgba(231,224,247,.45)'/%3E%3C/svg%3E");
+  background: rgba(245, 233, 220, .05) var(--caret) no-repeat right 11px center;
   border: 1px solid rgba(245, 233, 220, .14);
   color: rgba(245, 233, 220, .62);
+  white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
   transition: color .2s, border-color .2s;
 }
-#model:hover, #voice:hover { color: rgba(245, 233, 220, .9); border-color: rgba(245, 233, 220, .28); }
-#model:focus, #voice:focus { outline: none; border-color: rgba(245, 233, 220, .4); }
-#model option, #voice option { background: #171426; color: var(--ink); }
+#model:hover, #voice:hover, #agent:hover { color: rgba(245, 233, 220, .9); border-color: rgba(245, 233, 220, .28); }
+#model:focus, #voice:focus, #agent:focus { outline: none; border-color: rgba(245, 233, 220, .4); }
+#model option, #voice option, #agent option { background: var(--panel); color: var(--ink); }
 #voice { max-width: 96px; }
+#agent { max-width: 132px; }
+#agent[hidden] { display: none; }
 
 #tools {
   text-align: center;
@@ -280,9 +287,12 @@ three-d-stage {
   left: 50%;
   transform: translateX(-50%);
   top: calc(env(safe-area-inset-top) + 58px);
-  bottom: calc(env(safe-area-inset-bottom) + 22px);
+  /* The keyboard shortens the panel rather than covering what it types into. */
+  bottom: calc(env(safe-area-inset-bottom) + var(--keyboard-inset) + 22px);
   width: var(--stack);
-  max-width: calc(100% - 2 * var(--gutter));
+  max-width: calc(
+    100% - env(safe-area-inset-left) - env(safe-area-inset-right) - 2 * var(--gutter)
+  );
   display: flex;
   flex-direction: column;
   border-radius: 8px;
@@ -292,6 +302,18 @@ three-d-stage {
 #history[hidden],
 #memory[hidden],
 #connectors[hidden] { display: none; }
+
+/* An open panel owns the screen. What is under it should not ghost through it,
+   and should not be tabbable behind it either. */
+body:has(#history:not([hidden])) #hud,
+body:has(#memory:not([hidden])) #hud,
+body:has(#connectors:not([hidden])) #hud,
+body:has(#history:not([hidden])) #status,
+body:has(#memory:not([hidden])) #status,
+body:has(#connectors:not([hidden])) #status,
+body:has(#history:not([hidden])) #tool,
+body:has(#memory:not([hidden])) #tool,
+body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
 
 #history-head,
 #memory-head,
@@ -481,12 +503,18 @@ three-d-stage {
 #connectors .agent > header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   margin-bottom: 10px;
   color: rgba(245, 233, 220, .38);
 }
 #connectors .agent-name { color: rgba(245, 233, 220, .82); }
-#connectors .agent > header .meta { margin-left: auto; color: rgba(245, 233, 220, .22); }
+#connectors .agent > header .meta {
+  margin-left: auto;
+  min-width: 0;
+  color: rgba(245, 233, 220, .22);
+  overflow-wrap: anywhere;
+}
 #connectors .switch {
   appearance: none;
   cursor: pointer;
@@ -514,6 +542,11 @@ three-d-stage {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
+/* The setup row up top: the path gets the full width, the numbers share one. */
+#connectors .agent-fields.wide {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+#connectors .agent-fields.wide > :first-child { grid-column: 1 / -1; }
 #connectors .field {
   display: flex;
   flex-direction: column;
@@ -524,22 +557,41 @@ three-d-stage {
 #connectors .field input,
 #connectors .field select {
   appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   padding: 9px 10px;
   border-radius: 4px;
   background: rgba(245, 233, 220, .05);
   border: 1px solid rgba(245, 233, 220, .14);
   color: var(--ink);
   font: 400 13px/1.3 var(--sans);
+  transition: border-color .2s;
 }
+/* `appearance: none` takes the native arrow with it — draw one back on. */
 #connectors .field select {
   cursor: pointer;
+  padding-right: 28px;
+  background-image: var(--caret);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
   font: 600 11px/1.3 var(--mono);
   letter-spacing: .08em;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-#connectors .field select option { background: #171426; color: var(--ink); }
+#connectors .field select option {
+  background: var(--panel);
+  color: var(--ink);
+  letter-spacing: normal;
+  text-transform: none;
+}
 #connectors .field input::placeholder { color: rgba(245, 233, 220, .26); }
+#connectors .field input:hover,
+#connectors .field select:hover { border-color: rgba(245, 233, 220, .28); }
 #connectors .field input:focus,
 #connectors .field select:focus { outline: none; border-color: rgba(245, 233, 220, .4); }
 
@@ -632,19 +684,21 @@ three-d-stage {
 @media (max-width: 640px) {
   :root { --gutter: 14px; }
 
-  #status { top: calc(env(safe-area-inset-top) + 14px); }
+  /* The tabs own the top line — the status sits under them, not through them. */
   #tabs { top: calc(env(safe-area-inset-top) + 4px); }
-  #tool { top: calc(env(safe-area-inset-top) + 38px); }
+  #status { top: calc(env(safe-area-inset-top) + 54px); }
+  #tool { top: calc(env(safe-area-inset-top) + 78px); }
 
   #composer { flex-wrap: wrap; }
   #options {
     display: flex;
     order: 2;
     flex: 1 0 100%;
+    flex-wrap: wrap;
     gap: 8px;
   }
-  #model, #voice {
-    flex: 1 1 0;
+  #model, #voice, #agent {
+    flex: 1 1 96px;
     max-width: none;
     min-width: 0;
     padding: 11px 24px 11px 12px;
@@ -653,11 +707,11 @@ three-d-stage {
   #memory,
   #connectors {
     top: calc(env(safe-area-inset-top) + 50px);
-    bottom: calc(env(safe-area-inset-bottom) + 14px);
+    bottom: calc(env(safe-area-inset-bottom) + var(--keyboard-inset) + 14px);
   }
   #history-log,
   #memory-list,
-  #connectors-list { padding: 4px 14px 16px; }
+  #connectors-body { padding: 4px 14px 16px; }
 
   #caption { font-size: 15px; max-height: 28dvh; }
 }
@@ -665,7 +719,10 @@ three-d-stage {
 @media (pointer: coarse) {
   #mic, #send { width: 44px; height: 44px; }
   #tabs button { padding: 13px 15px; }
-  #history-head button, #connectors-head button, #connectors .task button { padding: 12px 14px; }
+  #history-head button, #memory-head button,
+  #connectors-head button, #connectors .task button { padding: 12px 14px; }
+  /* Under 16px, iOS zooms the page in the moment a field takes focus. */
+  #memory-input, #connectors .field input { font-size: 16px; }
   #tabs button:hover {
     color: rgba(245, 233, 220, .62);
     border-color: rgba(245, 233, 220, .14);
@@ -675,9 +732,10 @@ three-d-stage {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #you, #caption, #status, #tool, #tools, #composer, #mic, #send, #model, #voice,
+  #you, #caption, #status, #tool, #tools, #composer, #mic, #send, #model, #voice, #agent,
   #tabs button, #history-head button, #memory-head button, #memory-add button,
-  #connectors-head button, #connectors .task button {
+  #connectors-head button, #connectors .task button, #connectors .switch,
+  #connectors .field input, #connectors .field select, #connectors-note {
     transition-duration: .01ms;
   }
 }

@@ -19,7 +19,7 @@ task up, dispatches it to **Claude Code** or **Codex** running on this machine,
 and tells you when it lands — while the call carries on.
 
 ## Screenshot
-<img width="1718" height="1290" alt="image" src="https://github.com/user-attachments/assets/8b2dee68-2e38-4899-a538-af07edfadb16" />
+<img width="1719" height="1290" alt="Star mid-sentence, with a dispatch to Claude Code just read back" src="docs/screenshot.png" />
 
 
 ## Run
