@@ -19,6 +19,7 @@ Both `npm run dev` and `npm start` read `.env`.
 | `CONNECTOR_ANNOUNCE` | `true` | Star says so when a task settles, rather than waiting to be asked |
 | `XAI_MCP_SERVERS` | — | JSON array of remote MCP servers, or put it in `mcp.json` |
 | `PORT` | `5173` | |
+| `HOST` | `127.0.0.1` | Which interface the server binds, under both `npm run dev` and `npm start`. This machine only, unless you say otherwise — `npm start` takes serving TLS as saying otherwise, since a phone is the reason to, and `dev:lan` passes `--host`. `0.0.0.0` for the network, which the Docker image sets. |
 | `SSL_KEY`, `SSL_CERT` | — | Paths to a real certificate; `npm start` then serves HTTPS |
 
 The per-agent variables — command lines, models, permission modes, workspaces —
@@ -43,7 +44,9 @@ Safari). Tap through it once per device. To skip it, point `SSL_KEY` and
 [mkcert](https://github.com/FiloSottile/mkcert) issues one for a LAN IP.
 
 Note that a LAN address is also a page other people on the network can reach,
-and Vibey has no auth — see the warning in [connectors](connectors.md).
+and Vibey has no auth — see the warning in [connectors](connectors.md). That is
+why `npm start` binds to `127.0.0.1` on its own and only widens when it is
+serving TLS or `HOST` says to.
 
 ## Docker
 

@@ -113,8 +113,19 @@ before dispatching, get a plain yes for anything that doesn't come back, and
 never claim work happened that it hasn't checked on.
 
 **Anyone who can reach the page can spend your agent's tokens on your files.**
-Vibey has no accounts and no auth — that's fine for `localhost`, and it is the
-whole story before you put it on a LAN with connectors on.
+Vibey has no accounts and no auth, so who can reach it is the whole control:
+
+- `npm start` binds to `127.0.0.1` unless `HOST` says otherwise, or it is
+  serving TLS — which is the phone case, and the network by definition.
+- Reaching it is not the same as being it. The connector API refuses anything
+  that changes a setting if the browser says it came from another page, and the
+  realtime socket refuses the handshake outright. Without that second check a
+  page in an unrelated tab could open the call — WebSockets are outside the
+  same-origin policy — put a sentence in your mouth and get an agent spawned on
+  your files. Requests with no `Origin` at all are left alone: that is not a
+  browser, and anything already running here needs no help from one.
+- What is left is the network you put it on. On a LAN, everyone on it can reach
+  the page, and the page is the whole authorisation story.
 
 ## In Docker
 

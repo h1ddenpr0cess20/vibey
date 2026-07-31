@@ -53,9 +53,10 @@ boot and serve itself over both HTTP and HTTPS.
 The coding agents are all off until you switch one on in the **connectors**
 panel, because they edit files on the machine the server is running on. Vibey
 has no accounts and no auth: **anyone who can reach the page can spend your
-agent's tokens on your files.** That's fine for `localhost`, and it is the whole story
-before you put it on a LAN with connectors on — see
-[connectors](docs/connectors.md).
+agent's tokens on your files.** So `npm start` binds to `127.0.0.1` until you
+say otherwise, and neither the API nor the call socket will take an instruction
+from a page this server didn't serve. Putting it on a LAN with connectors on
+hands that to everyone on the LAN — see [connectors](docs/connectors.md).
 
 To run it on a phone, or in Docker, see
 [configuration](docs/configuration.md#on-a-phone).

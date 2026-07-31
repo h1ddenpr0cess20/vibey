@@ -1,3 +1,5 @@
+import { sameOrigin } from './origin.js';
+
 /** A body has to be small: this is settings, not an upload. */
 const MAX_BODY = 64 * 1024;
 
@@ -11,7 +13,12 @@ function readJSON(req) {
     let raw = '';
     req.on('data', (chunk) => {
       raw += chunk;
-      if (raw.length > MAX_BODY) reject(new Error('that is too much to be settings'));
+      /** Hanging up matters: a rejected promise does not stop the sender, and
+       *  the rest of the body would go on being buffered into nothing. */
+      if (raw.length > MAX_BODY) {
+        req.destroy();
+        reject(new Error('that is too much to be settings'));
+      }
     });
     req.on('end', () => {
       if (!raw.trim()) return resolve({});
@@ -32,6 +39,17 @@ export function createApiMiddleware(config, connectors) {
   return async function api(req, res, next) {
     const path = req.url.split('?')[0];
     if (!path.startsWith('/api/')) return next();
+
+    /**
+     * Anything that changes something has to have been asked for from this
+     * page. A cross-site POST needs no preflight if it keeps the content type
+     * simple, and this API takes a body without looking at that header — so
+     * without this, a page in another tab can switch every agent on at its
+     * loosest mode and point the workspace at the root of the disk.
+     */
+    if (req.method !== 'GET' && req.method !== 'HEAD' && !sameOrigin(req)) {
+      return sendJSON(res, 403, { ok: false, error: 'that did not come from this page' });
+    }
 
     if (path === '/api/config' && req.method === 'GET') {
       return sendJSON(res, 200, {
@@ -83,7 +101,13 @@ export function createApiMiddleware(config, connectors) {
 
     const stopping = /^\/api\/tasks\/([^/]+)\/stop$/.exec(path);
     if (stopping && req.method === 'POST') {
-      const result = connectors.run('cancel_task', { id: decodeURIComponent(stopping[1]) });
+      let id;
+      try {
+        id = decodeURIComponent(stopping[1]);
+      } catch {
+        return sendJSON(res, 400, { ok: false, error: 'that is not a task number' });
+      }
+      const result = connectors.run('cancel_task', { id });
       return sendJSON(res, result.ok ? 200 : 409, result);
     }
 

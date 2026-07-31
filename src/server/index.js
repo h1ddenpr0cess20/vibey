@@ -7,10 +7,21 @@ const tls = await loadTls({ https: process.argv.includes('--https') });
 
 const app = createApp(config, { tls });
 
-app.listen(config.port, () => {
+/**
+ * This machine only, unless someone said otherwise. There are no accounts here
+ * and the connectors edit real files, so reaching the wifi is a decision rather
+ * than a default. TLS is that decision made: a phone is the reason to have it.
+ *
+ * Undefined rather than a wildcard address for the wide case — that is what
+ * lets Node take both families where it can and fall back where it cannot.
+ */
+const local = !config.host && !tls;
+const host = local ? '127.0.0.1' : config.host || undefined;
+
+app.listen(config.port, host, () => {
   const scheme = tls ? 'https' : 'http';
   console.log(`vibey → ${scheme}://localhost:${config.port}`);
-  if (tls) {
+  if (host !== '127.0.0.1' && host !== '::1') {
     console.log(`     → ${scheme}://<this machine on the wifi>:${config.port}`);
   }
   if (!config.apiKey) {

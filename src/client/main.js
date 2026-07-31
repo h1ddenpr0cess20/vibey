@@ -148,9 +148,11 @@ session.on('user', (text) => {
 session.on('tool', (label) => hud.setTool(label));
 
 /** Dispatched work outlives the call it came from, so the board is never cleared. */
-session.on('task', (task) => {
+session.on('task', (task, replay) => {
   board.apply(task);
-  if (task.status === 'running') return;
+  /** A redial replays every task the server still holds, to refill the board.
+   *  Logging those again would copy the whole session into the log each time. */
+  if (replay || task.status === 'running') return;
 
   /** What the agent sent back belongs in the log, beside the talk that sent it. */
   history.append({

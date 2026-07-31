@@ -110,6 +110,8 @@ export function loadConfig(env = process.env) {
 
   return {
     port: Number(env.PORT) || 5173,
+    /** Empty means "decide from how it was started" — see src/server/index.js. */
+    host: env.HOST || '',
     apiKey: env.XAI_API_KEY,
     realtimeUrl: env.XAI_REALTIME_URL || 'wss://api.x.ai/v1/realtime',
     defaultModel,

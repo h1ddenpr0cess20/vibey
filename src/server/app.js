@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createApiMiddleware } from './api.js';
 import { loadConfig } from './config.js';
 import { createConnectors } from './connectors/index.js';
+import { refuseUpgrade, sameOrigin } from './origin.js';
 import { createRealtimeProxy } from './realtime.js';
 import { createStaticMiddleware } from './static.js';
 
@@ -45,8 +46,14 @@ export function createApp(config = loadConfig(), { root = DIST, tls = null } = {
     connectors.close();
   });
 
+  /**
+   * The same-origin policy does not apply to WebSockets, so without this check
+   * any page in any other tab can open the call socket, put words in the
+   * person's mouth and get a coding agent spawned on their files.
+   */
   server.on('upgrade', (req, socket, head) => {
     if (req.url.split('?')[0] !== REALTIME_PATH) return socket.destroy();
+    if (!sameOrigin(req)) return refuseUpgrade(socket);
     realtime.handleUpgrade(req, socket, head);
   });
 
