@@ -112,15 +112,25 @@ export function priorTurns(turns) {
   return kept;
 }
 
-/** One replayed turn, in the shape its role takes. */
+/**
+ * One replayed turn, as an item. Both roles carry `input_text`: xAI documents
+ * history seeding with a user text message or an assistant text message, and
+ * `input_text` as the content type for a text message either way. It follows
+ * OpenAI's beta naming here, as it does for the text events `events.js` has to
+ * handle two spellings of — `output_text` is the GA shape and not this one.
+ *
+ * Each of these is a billed event upstream, which is what keeps the replay
+ * capped: a picked-up conversation costs its turns, once.
+ */
 export function historyItem({ role, content }) {
-  const part = role === 'assistant'
-    ? { type: 'output_text', text: content }
-    : { type: 'input_text', text: content };
-
   return {
     type: 'conversation.item.create',
-    item: { type: 'message', role, status: 'completed', content: [part] },
+    item: {
+      type: 'message',
+      role,
+      status: 'completed',
+      content: [{ type: 'input_text', text: content }],
+    },
   };
 }
 

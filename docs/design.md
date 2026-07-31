@@ -93,11 +93,21 @@ the only shape that works. Flattening a transcript into a single message leaves
 the model with no history at all, only somebody telling it about one — it will
 treat the first thing said in the new call as the first thing ever said.
 
+Both roles carry `input_text`. xAI documents history seeding with a user text
+message or an assistant text message and `input_text` as the content type for a
+text message either way — it follows OpenAI's beta naming here, the same way it
+does for the text events `events.js` has to handle two spellings of. OpenAI's GA
+shape puts assistant text in `output_text`; that is not this API.
+
 The turns arrive as turns rather than as items so the page never names a role:
 it hands over what was said, and `realtime.js` decides what goes upstream. The
 line explaining that those turns are an earlier conversation is part of the
-instructions, so it stays server-side with the rest of the persona. Both ends
-cap the replay at 40 turns and 6 KB, oldest shed first.
+instructions, so it stays server-side with the rest of the persona.
+
+Both ends cap the replay at 40 turns and 6 KB, oldest shed first, and the cap is
+a bill as well as a budget: xAI charges per `conversation.item.create` the client
+sends, so a picked-up conversation costs its turns, once, at the moment it is
+picked up. Lowering the cap lowers that; it is one constant at each end.
 
 Memory is capped at 50 lines, each flattened to one line and cut at 600
 characters; past the cap the oldest goes. `remember` and `forget` run in the

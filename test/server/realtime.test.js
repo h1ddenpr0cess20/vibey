@@ -99,9 +99,14 @@ describe('priorTurns', () => {
 });
 
 describe('historyItem', () => {
-  it('gives each role the content type the API takes for it', () => {
+  it('carries both roles as the text content type xAI documents for seeding', () => {
     assert.equal(historyItem({ role: 'user', content: 'hi' }).item.content[0].type, 'input_text');
-    assert.equal(historyItem({ role: 'assistant', content: 'hi' }).item.content[0].type, 'output_text');
+    assert.equal(historyItem({ role: 'assistant', content: 'hi' }).item.content[0].type, 'input_text');
+  });
+
+  it('keeps the role, which is what tells the two apart', () => {
+    assert.equal(historyItem({ role: 'assistant', content: 'hi' }).item.role, 'assistant');
+    assert.equal(historyItem({ role: 'user', content: 'hi' }).item.role, 'user');
   });
 });
 
@@ -209,7 +214,7 @@ describe('the proxy', () => {
             type: 'message',
             role: 'assistant',
             status: 'completed',
-            content: [{ type: 'output_text', text: 'The small one. Ship it.' }],
+            content: [{ type: 'input_text', text: 'The small one. Ship it.' }],
           },
         },
       ]);
