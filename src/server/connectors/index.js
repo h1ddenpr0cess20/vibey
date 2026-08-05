@@ -35,13 +35,20 @@ export function createConnectors(config = {}) {
     },
   });
 
+  /**
+   * Only handing work out needs an agent switched on. Looking in on work that
+   * is already running, and stopping it, has to keep working after the last one
+   * goes off — switching a connector off is what someone does when they want it
+   * to stop, and it would otherwise leave a live agent editing files with no way
+   * to reach it short of the time limit.
+   */
   function run(name, args, { agent: picked } = {}) {
     const names = enabled();
-    if (!names.length) return { ok: false, error: 'no coding agent is switched on' };
 
     try {
       switch (name) {
         case 'dispatch_task': {
+          if (!names.length) return { ok: false, error: 'no coding agent is switched on' };
           const asked = names.includes(args?.agent) ? args.agent : null;
           const agent = asked ?? (names.includes(picked) ? picked : names[0]);
           const task = tasks.dispatch({ agent, task: args?.task });

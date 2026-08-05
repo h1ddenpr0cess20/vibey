@@ -24,7 +24,14 @@ const memory = createMemory();
 const session = createVoiceSession({ memory });
 const hud = createHud();
 const history = createHistory();
-const historyPanel = createHistoryPanel({ history, onNew: startFresh, onResume: pickUp });
+const historyPanel = createHistoryPanel({
+  history,
+  onNew: startFresh,
+  onResume: pickUp,
+  /** Turns that have been deleted are not context: the next dial must not hand
+   *  over the conversation the log was just cleared of. */
+  onClear: () => { session.context = []; },
+});
 const memoryPanel = createMemoryPanel({ memory, onChange: () => session.syncMemory() });
 const board = createTaskBoard();
 const connectorsPanel = createConnectorsPanel({

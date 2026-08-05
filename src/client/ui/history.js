@@ -23,7 +23,7 @@ function agentHead(doc, turn) {
   return [head, state];
 }
 
-export function createHistoryPanel({ root = document, history, onNew, onResume } = {}) {
+export function createHistoryPanel({ root = document, history, onNew, onResume, onClear } = {}) {
   const panelEl = root.querySelector('#history');
   const logEl = root.querySelector('#history-log');
   const toggleEl = root.querySelector('#history-toggle');
@@ -182,6 +182,7 @@ export function createHistoryPanel({ root = document, history, onNew, onResume }
     }
     disarm();
     history.clear();
+    onClear?.();
     render();
   });
 

@@ -27,6 +27,14 @@ export function createEventHandler({
   let transcript = '';
   let current = null;
   let called = new Set();
+  /** Responses the person talked over. Whatever was already on the wire for one
+   *  arrives after the interruption and is not part of the conversation. */
+  let abandoned = new Set();
+
+  /** Whether a frame belongs to a response that has been talked over. */
+  function stale(event) {
+    return Boolean(event.response_id) && abandoned.has(event.response_id);
+  }
 
   function flush() {
     if (transcript.trim()) record({ role: 'assistant', content: transcript.trim() });
@@ -64,8 +72,15 @@ export function createEventHandler({
     onFunctionCall({ call_id: id, name, args });
   }
 
+  /**
+   * The person started talking over the answer. The queue goes, and the
+   * response that was playing is marked so the rest of it — audio and
+   * transcript both, already sent and still in flight — is dropped rather than
+   * picking the sentence back up a beat after they cut in.
+   */
   function interrupt() {
     flushAudio();
+    if (current) abandoned.add(current);
     current = null;
     flush();
     setState('listening');
@@ -109,6 +124,7 @@ export function createEventHandler({
 
       case 'response.output_audio.delta':
       case 'response.audio.delta': {
+        if (stale(event)) return;
         if (current && event.response_id && event.response_id !== current) return;
         const samples = decodePCM(event.delta);
         if (!samples) return;
@@ -121,12 +137,14 @@ export function createEventHandler({
       case 'response.audio_transcript.delta':
       case 'response.output_text.delta':
       case 'response.text.delta':
+        if (stale(event)) return;
         transcript += event.delta ?? '';
         emit('caption', transcript);
         return;
 
       case 'response.output_audio_transcript.updated':
       case 'response.output_text.updated':
+        if (stale(event)) return;
         transcript = event.transcript ?? event.text ?? transcript;
         emit('caption', transcript);
         return;
@@ -155,6 +173,9 @@ export function createEventHandler({
       case 'response.done': {
         setResponding(false);
         const response = event.response ?? {};
+        /** The end of a response that was talked over closes the book on it:
+         *  nothing else can arrive for it, so it stops being watched for. */
+        const over = Boolean(response.id) && abandoned.delete(response.id);
         for (const item of response.output ?? []) {
           if (item?.type === 'function_call') dispatch(item);
         }
@@ -163,7 +184,8 @@ export function createEventHandler({
           fail(response.status_details?.error?.message ?? 'the response failed');
         }
         emit('done', { usage: response.usage });
-        if (!playing()) setState('listening');
+        /** Whatever is happening now started when they cut in, not here. */
+        if (!over && !playing()) setState('listening');
         return;
       }
 
@@ -190,6 +212,7 @@ export function createEventHandler({
       transcript = '';
       current = null;
       called = new Set();
+      abandoned = new Set();
     },
   };
 }
