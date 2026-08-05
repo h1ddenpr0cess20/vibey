@@ -588,6 +588,75 @@ describe('a task that outlives the call it came from', () => {
   });
 });
 
+/**
+ * Switching a connector off is what someone does when they want the agent to
+ * stop. A task already running is a child process editing real files, and the
+ * only two things that can reach it — the stop button and the model's own
+ * cancel_task — must not go with the tool list.
+ */
+describe('a task whose agent is switched off underneath it', () => {
+  it('can still be looked in on and stopped', async () => {
+    const xai = await startXaiStub();
+    const app = await startApp(wired({
+      XAI_REALTIME_URL: xai.address,
+      CONNECTOR_FILE: scratchSettings(),
+    }));
+    try {
+      const client = await app.openSocket();
+      await client.waitFor('proxy.ready');
+
+      xai.send({
+        type: 'response.output_item.done',
+        item: {
+          type: 'function_call',
+          call_id: 'off1',
+          name: 'dispatch_task',
+          arguments: JSON.stringify({ task: 'sleep until stopped' }),
+        },
+      });
+
+      const running = await until(() => xai.received()
+        .filter((f) => f.item?.type === 'function_call_output')
+        .map((f) => JSON.parse(f.item.output))
+        .find((o) => o.status === 'running'));
+
+      const off = await fetch(`${app.origin}/api/connectors`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agents: { claude: { enabled: false } } }),
+      });
+      assert.equal(off.status, 200);
+      assert.deepEqual((await (await app.get('/api/tasks')).json()).agents, [],
+        'nothing is on any more');
+
+      const stopped = await fetch(`${app.origin}/api/tasks/${running.id}/stop`, { method: 'POST' });
+      assert.equal(stopped.status, 200, 'the stop button still reaches it');
+
+      const settled = await until(() => client.frames.find(
+        (f) => f.type === 'task.update' && f.task.id === running.id && f.task.status === 'cancelled',
+      ));
+      assert.ok(settled, 'the agent actually went');
+    } finally {
+      await app.close();
+      await xai.close();
+    }
+  });
+
+  it('still has nowhere to send new work', async () => {
+    const connectors = createConnectors({
+      connectors: { agents: {}, file: scratchSettings() },
+    });
+    try {
+      assert.match(connectors.run('dispatch_task', { task: 'anything' }).error,
+        /no coding agent is switched on/);
+      assert.match(connectors.run('cancel_task', { id: '1' }).error, /no task 1/);
+      assert.deepEqual(connectors.run('check_task', {}).tasks, []);
+    } finally {
+      connectors.close();
+    }
+  });
+});
+
 describe('a task nobody stops', () => {
   it('is stopped for them, and says so', async () => {
     const xai = await startXaiStub();

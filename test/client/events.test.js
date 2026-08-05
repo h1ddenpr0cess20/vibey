@@ -121,6 +121,43 @@ describe('barge-in', () => {
     h.events.handle({ type: 'response.created', response: { id: 'resp_1' } });
     assert.ok(h.played.includes('<flush>'));
   });
+
+  /**
+   * Cutting in has to stay cut in. Whatever was already on the wire for the
+   * answer arrives after the interruption, and picking the sentence back up a
+   * beat later is the one thing barge-in exists to stop.
+   */
+  it('drops what was still in flight for the response that was talked over', () => {
+    const h = harness({ playing: true });
+    h.events.handle({ type: 'response.created', response: { id: 'resp_1' } });
+    h.events.handle({ type: 'response.output_audio.delta', delta: AUDIO, response_id: 'resp_1' });
+    h.events.handle({ type: 'response.output_audio_transcript.delta', delta: 'so what you want', response_id: 'resp_1' });
+
+    h.events.handle({ type: 'input_audio_buffer.speech_started' });
+    const after = h.played.length;
+
+    h.events.handle({ type: 'response.output_audio.delta', delta: AUDIO, response_id: 'resp_1' });
+    h.events.handle({ type: 'response.output_audio_transcript.delta', delta: ' is a queue', response_id: 'resp_1' });
+
+    assert.equal(h.played.length, after, 'nothing more is played');
+    assert.equal(h.states.at(-1), 'listening', 'and he does not start speaking again');
+
+    h.events.handle({ type: 'response.done', response: { id: 'resp_1' } });
+    assert.deepEqual(h.messages, [{ role: 'assistant', content: 'so what you want' }],
+      'the half he got out is one turn, not two');
+    assert.equal(h.states.at(-1), 'listening');
+  });
+
+  it('lets the next response through, having only dropped the one cut off', () => {
+    const h = harness({ playing: true });
+    h.events.handle({ type: 'response.created', response: { id: 'resp_1' } });
+    h.events.handle({ type: 'input_audio_buffer.speech_started' });
+    h.events.handle({ type: 'response.done', response: { id: 'resp_1' } });
+
+    h.events.handle({ type: 'response.created', response: { id: 'resp_2' } });
+    h.events.handle({ type: 'response.output_audio.delta', delta: AUDIO, response_id: 'resp_2' });
+    assert.equal(h.states.at(-1), 'speaking');
+  });
 });
 
 describe('end of turn', () => {
