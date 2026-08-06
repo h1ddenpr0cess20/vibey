@@ -37,6 +37,17 @@ describe('GET /api/config', () => {
     assert.equal(raw.includes('mcp.example.com'), false);
   });
 
+  it('names the switches the page may throw, and no others', async () => {
+    const body = await (await app.get('/api/config')).json();
+
+    assert.deepEqual(body.switches, [
+      { name: 'web_search', label: 'web search' },
+      { name: 'x_search', label: 'X search' },
+      { name: 'code_interpreter', label: 'code' },
+      { name: 'mcp:orders', label: 'orders' },
+    ]);
+  });
+
   it('reports a missing key rather than failing at the mic', async () => {
     const bare = await startApp({ XAI_API_KEY: '' });
     try {

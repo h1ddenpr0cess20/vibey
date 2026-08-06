@@ -323,6 +323,59 @@ describe('the proxy', () => {
     assert.equal(update.session.instructions, SYSTEM);
   });
 
+  describe('a tool switched off in the page', () => {
+    const declared = () => {
+      const updates = xai.received().filter((f) => f.type === 'session.update');
+      return updates.at(-1).session.tools.map((t) => t.name ?? t.type);
+    };
+
+    it('is re-declared without it, mid-call, and the frame never goes up', async () => {
+      const client = await app.openSocket();
+      await client.waitFor('proxy.ready');
+      const before = xai.received().length;
+
+      client.send({ type: 'session.tools', off: ['x_search', 'mcp:secret-tools'] });
+      await settle();
+
+      const forwarded = xai.received().slice(before);
+      assert.deepEqual(forwarded.map((f) => f.type), ['session.update']);
+      assert.deepEqual(declared(), ['web_search', 'code_interpreter', 'remember', 'forget']);
+    });
+
+    it('comes back when it is switched on again', async () => {
+      const client = await app.openSocket();
+      await client.waitFor('proxy.ready');
+
+      client.send({ type: 'session.tools', off: ['web_search'] });
+      await settle();
+      assert.equal(declared().includes('web_search'), false);
+
+      client.send({ type: 'session.tools', off: [] });
+      await settle();
+      assert.equal(declared().includes('web_search'), true);
+    });
+
+    it('is already out of the first session.update when it was switched off before the call', async () => {
+      const client = await app.openSocket();
+      client.send({ type: 'session.tools', off: ['web_search'] });
+      await client.waitFor('proxy.ready');
+      await settle();
+
+      assert.equal(declared().includes('web_search'), false);
+    });
+
+    it('ignores a name this server has no switch for', async () => {
+      const client = await app.openSocket();
+      await client.waitFor('proxy.ready');
+
+      client.send({ type: 'session.tools', off: ['remember', 'mcp:nowhere', 42] });
+      await settle();
+
+      assert.deepEqual(declared(),
+        ['web_search', 'x_search', 'code_interpreter', 'remember', 'forget', 'mcp']);
+    });
+  });
+
   it('passes server events down to the page untouched', async () => {
     const client = await app.openSocket();
     await client.waitFor('proxy.ready');

@@ -101,6 +101,22 @@ and killed is not, which is what the [connectors](connectors.md) are.
 `remember` and `forget` run in the page. `dispatch_task`, `check_task` and
 `cancel_task` run in the proxy. Everything else runs at xAI.
 
+### Switching one off for a call
+
+`tools` opens a switch for each tool this server offers — web search, X search,
+the code interpreter, and one per MCP server. Switching one off takes it out of
+the call that is up right now: the proxy re-declares the tools with
+`session.update`, so there is no redial and nothing to reconnect. The switches
+live in `localStorage`, so they hold across calls and reloads in that browser.
+
+The page can only take away. What exists is the environment's to say, and a tool
+`XAI_CODE_INTERPRETER=false` never enabled has no switch to find — a browser
+asking for one gets nothing, because the proxy checks every name against its own
+list before it drops anything. Memory and the connectors are not in this panel:
+both already have switches of their own, and a connector's is against the server
+rather than the browser, because it runs a CLI that edits files on this
+machine.
+
 ## The log and the memory
 
 `log` opens past conversations, newest first. A settled task is a turn too — a

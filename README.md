@@ -37,6 +37,12 @@ back on. It also switches itself off after a minute of silence, and the call
 survives that too. Holding the mic down is the hang-up — a ring closes around it
 while you hold, and the call ends when it lands.
 
+`tools` has a switch for each tool Star can reach for — web search, X search,
+the code interpreter, and any MCP server the environment gave it. Switching one
+off takes it out of the call already in progress, and it stays off in that
+browser until you switch it back on. Nothing there can add a tool the server was
+not started with, and the connectors keep their own panel.
+
 The log keeps every conversation. `continue` on one picks it back up: the call is
 dialled again with those turns handed over as context, and what you say from
 there lands in the same entry rather than a new one.

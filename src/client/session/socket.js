@@ -10,7 +10,16 @@ function socketUrl({ voice, model }) {
   return url;
 }
 
-export function connect({ voice, model, agent, memories = [], history = [], onEvent, onClose }) {
+export function connect({
+  voice,
+  model,
+  agent,
+  memories = [],
+  history = [],
+  toolsOff = [],
+  onEvent,
+  onClose,
+}) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(socketUrl({ voice, model }));
     let settled = false;
@@ -26,6 +35,8 @@ export function connect({ voice, model, agent, memories = [], history = [], onEv
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      /** Sent as the call opens, so the first session config already omits them. */
+      if (toolsOff.length) ws.send(JSON.stringify({ type: 'session.tools', off: toolsOff }));
       if (memories.length) ws.send(JSON.stringify({ type: 'session.memory', memories }));
       /** Ahead of any audio, so the proxy has it before the call is under way. */
       if (history.length) ws.send(JSON.stringify({ type: 'session.history', turns: history }));
