@@ -1,0 +1,38 @@
+version: 2
+
+updates:
+  # Application dependencies (package.json / package-lock.json)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 10
+    groups:
+      # Non-breaking updates land as a single PR to keep review overhead low.
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+    # Majors stay ungrouped so each one gets its own PR and its own CI run.
+
+  # GitHub Actions used by ci.yml and docker.yml
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Base images in the Dockerfile
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
