@@ -6,11 +6,13 @@ import { createHistory } from './history.js';
 import { createMemory } from './memory.js';
 import { createStar } from './star/index.js';
 import { createVoiceSession } from './session/index.js';
+import { createToolSwitches } from './tools.js';
 import { createTaskBoard } from './tasks.js';
 import { createControls } from './ui/controls.js';
 import { createHistoryPanel } from './ui/history.js';
 import { createMemoryPanel } from './ui/memory.js';
 import { createConnectorsPanel } from './ui/connectors.js';
+import { createToolsPanel } from './ui/tools.js';
 import { createHud } from './ui/hud.js';
 import { stripStageChrome } from './ui/stage.js';
 import { trackKeyboardInset } from './ui/viewport.js';
@@ -21,7 +23,8 @@ const { THREE } = await stage.ready;
 
 const star = createStar({ stage, THREE });
 const memory = createMemory();
-const session = createVoiceSession({ memory });
+const switches = createToolSwitches();
+const session = createVoiceSession({ memory, switches });
 const hud = createHud();
 const history = createHistory();
 const historyPanel = createHistoryPanel({
@@ -32,7 +35,20 @@ const historyPanel = createHistoryPanel({
    *  over the conversation the log was just cleared of. */
   onClear: () => { session.context = []; },
 });
-const memoryPanel = createMemoryPanel({ memory, onChange: () => session.syncMemory() });
+const memoryPanel = createMemoryPanel({
+  memory,
+  onChange: () => {
+    session.syncMemory();
+    paintTools();
+  },
+});
+const toolsPanel = createToolsPanel({
+  switches,
+  onChange: () => {
+    session.syncTools();
+    paintTools();
+  },
+});
 const board = createTaskBoard();
 const connectorsPanel = createConnectorsPanel({
   board,
@@ -42,6 +58,24 @@ const connectorsPanel = createConnectorsPanel({
     session.agent = chosen;
   },
 });
+
+/** Whether the server has memory at all — the switch in the panel is local. */
+let memoryTool = false;
+
+/**
+ * The chip under the composer: what Star can actually reach for, right now.
+ * The agents come from the board rather than from the switches — they are the
+ * connectors panel's to turn on, and they answer for the whole server.
+ */
+function paintTools() {
+  hud.showTools([
+    ...switches.labels,
+    memoryTool && memory.enabled ? 'memory' : null,
+    ...board.agents,
+  ]);
+}
+
+board.subscribe(paintTools);
 
 trackKeyboardInset();
 
@@ -90,6 +124,7 @@ const controls = createControls({
   },
 
   onCancel() {
+    if (toolsPanel.isOpen) return toolsPanel.close();
     if (memoryPanel.isOpen) return memoryPanel.close();
     if (historyPanel.isOpen) return historyPanel.close();
     if (connectorsPanel.isOpen) return connectorsPanel.close();
@@ -223,7 +258,9 @@ try {
   session.model = chosen.model;
   session.voice = chosen.voice;
   session.agent = chosen.agent;
-  hud.showTools(config.tools);
+  switches.setCatalog(config.switches);
+  memoryTool = Boolean(config.tools.memory);
+  paintTools();
   if (!config.ready) throw new Error('XAI_API_KEY is not set — nothing to dial with.');
 } catch (err) {
   star.stall(true);

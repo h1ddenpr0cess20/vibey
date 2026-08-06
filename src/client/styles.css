@@ -302,7 +302,8 @@ three-d-stage {
 
 #history,
 #memory,
-#connectors {
+#connectors,
+#toolbox {
   position: fixed;
   z-index: 6;
   left: 50%;
@@ -322,23 +323,28 @@ three-d-stage {
 }
 #history[hidden],
 #memory[hidden],
-#connectors[hidden] { display: none; }
+#connectors[hidden],
+#toolbox[hidden] { display: none; }
 
 /* An open panel owns the screen. What is under it should not ghost through it,
    and should not be tabbable behind it either. */
 body:has(#history:not([hidden])) #hud,
 body:has(#memory:not([hidden])) #hud,
 body:has(#connectors:not([hidden])) #hud,
+body:has(#toolbox:not([hidden])) #hud,
 body:has(#history:not([hidden])) #status,
 body:has(#memory:not([hidden])) #status,
 body:has(#connectors:not([hidden])) #status,
+body:has(#toolbox:not([hidden])) #status,
 body:has(#history:not([hidden])) #tool,
 body:has(#memory:not([hidden])) #tool,
-body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
+body:has(#connectors:not([hidden])) #tool,
+body:has(#toolbox:not([hidden])) #tool { visibility: hidden; }
 
 #history-head,
 #memory-head,
-#connectors-head {
+#connectors-head,
+#toolbox-head {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -348,10 +354,12 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
 }
 #history-head .chip:first-child,
 #memory-head .chip:first-child,
-#connectors-head .chip:first-child { flex: 1; }
+#connectors-head .chip:first-child,
+#toolbox-head .chip:first-child { flex: 1; }
 #history-head button,
 #memory-head button,
 #connectors-head button,
+#toolbox-head button,
 #connectors .task button,
 #memory-add button {
   appearance: none;
@@ -366,6 +374,7 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
 #history-head button:hover,
 #memory-head button:hover,
 #connectors-head button:hover,
+#toolbox-head button:hover,
 #connectors .task button:hover,
 #memory-add button:hover { background: rgba(245, 233, 220, .14); color: var(--ink); }
 #history-head button:disabled,
@@ -392,14 +401,16 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
 #memory-clear.armed { color: var(--error); }
 #history :focus-visible,
 #memory :focus-visible,
-#connectors :focus-visible {
+#connectors :focus-visible,
+#toolbox :focus-visible {
   outline: 2px solid rgba(245, 233, 220, .55);
   outline-offset: 2px;
 }
 
 #history-log,
 #memory-list,
-#connectors-body {
+#connectors-body,
+#toolbox-list {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -493,17 +504,40 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
 
 #history .empty,
 #memory .empty,
-#connectors .empty {
+#connectors .empty,
+#toolbox .empty {
   margin: 18px 0;
   font: 400 14px/1.6 var(--sans);
   color: rgba(245, 233, 220, .34);
   text-align: center;
 }
 
-#memory-list { margin: 0; list-style: none; }
+#memory-list,
+#toolbox-list { margin: 0; list-style: none; }
 
 #memory-switch[aria-pressed="false"] { color: rgba(245, 233, 220, .3); }
 #memory.off #memory-list { opacity: .4; }
+.tool-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+.tool-item + .tool-item { border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
+.tool-name {
+  flex: 1;
+  font: 400 14px/1.6 var(--sans);
+  color: color-mix(in srgb, var(--ink) 90%, transparent);
+  overflow-wrap: break-word;
+}
+.tool-item[data-on="false"] .tool-name { color: color-mix(in srgb, var(--ink) 34%, transparent); }
+.tool-item .switch { flex: none; min-width: 44px; }
+
+#toolbox-note {
+  padding: 12px 16px;
+  color: color-mix(in srgb, var(--ink) 26%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+}
 
 .memory-item {
   display: flex;
@@ -555,7 +589,8 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
   color: rgba(245, 233, 220, .22);
   overflow-wrap: anywhere;
 }
-#connectors .switch {
+#connectors .switch,
+#toolbox .switch {
   appearance: none;
   cursor: pointer;
   padding: 6px 10px;
@@ -565,7 +600,8 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
   color: rgba(245, 233, 220, .34);
   transition: background .2s, color .2s, border-color .2s;
 }
-#connectors .switch[aria-pressed="true"] {
+#connectors .switch[aria-pressed="true"],
+#toolbox .switch[aria-pressed="true"] {
   background: var(--listening);
   border-color: var(--listening);
   color: var(--void);
@@ -745,13 +781,15 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
   }
   #history,
   #memory,
-  #connectors {
+  #connectors,
+  #toolbox {
     top: calc(env(safe-area-inset-top) + 50px);
     bottom: calc(env(safe-area-inset-bottom) + var(--keyboard-inset) + 14px);
   }
   #history-log,
   #memory-list,
-  #connectors-body { padding: 4px 14px 16px; }
+  #connectors-body,
+  #toolbox-list { padding: 4px 14px 16px; }
 
   #caption { font-size: 15px; max-height: 28dvh; }
 }
@@ -760,7 +798,8 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
   #mic, #send { width: 44px; height: 44px; }
   #tabs button { padding: 13px 15px; }
   #history-head button, #memory-head button,
-  #connectors-head button, #connectors .task button { padding: 12px 14px; }
+  #connectors-head button, #toolbox-head button,
+  #connectors .task button, #toolbox .switch { padding: 12px 14px; }
   /* Under 16px, iOS zooms the page in the moment a field takes focus. */
   #memory-input, #connectors .field input { font-size: 16px; }
   #tabs button:hover {
@@ -774,7 +813,8 @@ body:has(#connectors:not([hidden])) #tool { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
   #you, #caption, #status, #tool, #tools, #composer, #mic, #send, #model, #voice, #agent,
   #tabs button, #history-head button, #memory-head button, #memory-add button,
-  #connectors-head button, #connectors .task button, #connectors .switch,
+  #connectors-head button, #toolbox-head button, #connectors .task button,
+  #connectors .switch, #toolbox .switch,
   #connectors .field input, #connectors .field select, #connectors-note {
     transition-duration: .01ms;
   }

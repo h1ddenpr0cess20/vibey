@@ -76,9 +76,9 @@ export function createHud(root = document) {
       captionEl.classList.add('visible', 'error');
     },
 
-    showTools({ web_search: web, x_search: x, code_interpreter: code, memory, connectors = [], mcp }) {
-      const names = [web && 'web', x && 'X', code && 'code', memory && 'memory', ...connectors, ...mcp]
-        .filter(Boolean);
+    /** The tools in play, as labels — repainted whenever a switch moves. */
+    showTools(labels) {
+      const names = (labels ?? []).filter(Boolean);
       const el = root.querySelector('#tools');
       el.textContent = names.length ? `tools: ${names.join(' · ')}` : '';
       el.classList.toggle('visible', names.length > 0);

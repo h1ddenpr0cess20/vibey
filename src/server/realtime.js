@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 import { createConnectors } from './connectors/index.js';
 import { buildTools, sessionConfig } from './persona.js';
+import { pickTools, switchedOff } from './tools.js';
 
 const ALLOWED = new Set([
   'input_audio_buffer.append',
@@ -20,6 +21,15 @@ const MAX_FRAME = 1 << 20;
  * instructions. The persona itself stays server-side and unreachable.
  */
 export const MEMORY_EVENT = 'session.memory';
+
+/**
+ * Another of the page's own frames: which of the server's tools it wants left
+ * out of this call. It can only take away — what exists is the environment's to
+ * say — and it lands mid-call, so switching one is a fresh `session.update`
+ * rather than a redial. The connectors are not switched here; they have a panel
+ * of their own, and it answers for the whole server.
+ */
+export const TOOLS_EVENT = 'session.tools';
 
 /**
  * The proxy's own frame down to the page: a task changed state. It carries a
@@ -195,13 +205,14 @@ export function createRealtimeProxy(config, connectors = createConnectors(config
     let pending = [];
     let memories = [];
     let history = [];
+    let off = [];
 
     /** Built per send, not per call: the panel can switch an agent on mid-call. */
     const update = () => JSON.stringify({
       type: 'session.update',
       session: sessionConfig({
         voice,
-        tools: buildTools({ ...config.tools, connectors: connectors.agents }),
+        tools: buildTools({ ...pickTools(config.tools, off), connectors: connectors.agents }),
         memories,
         agents: connectors.agents,
         tasks: connectors.tasks(),
@@ -351,6 +362,12 @@ export function createRealtimeProxy(config, connectors = createConnectors(config
 
       if (incoming?.type === AGENT_EVENT) {
         if (connectors.agents.includes(incoming.agent)) preferred = incoming.agent;
+        return;
+      }
+
+      if (incoming?.type === TOOLS_EVENT) {
+        off = switchedOff(config.tools, incoming.off);
+        if (upstream.readyState === WebSocket.OPEN) upstream.send(update());
         return;
       }
 

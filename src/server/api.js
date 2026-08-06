@@ -1,4 +1,5 @@
 import { sameOrigin } from './origin.js';
+import { toolCatalog } from './tools.js';
 
 /** A body has to be small: this is settings, not an upload. */
 const MAX_BODY = 64 * 1024;
@@ -65,6 +66,8 @@ export function createApiMiddleware(config, connectors) {
           connectors: connectors.agents,
           mcp: config.tools.mcpServers.map((s) => s.server_label),
         },
+        /** What the page may switch off for its own call, and what to call it. */
+        switches: toolCatalog(config.tools),
         ready: Boolean(config.apiKey),
       });
     }

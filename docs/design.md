@@ -35,10 +35,15 @@ Two things are dropped as persona overrides — a `session.update` from the
 browser, and the `instructions` field on a `response.create`.
 `test/server/realtime.test.js` covers that.
 
-One frame type never reaches xAI: `session.memory`, which the page sends with
-what it has stored. The proxy folds those lines into the instructions and
-re-sends its own `session.update`, so the persona stays here and the memories
-stay in the browser.
+Two frame types never reach xAI. `session.memory` carries what the page has
+stored; the proxy folds those lines into the instructions and re-sends its own
+`session.update`, so the persona stays here and the memories stay in the
+browser. `session.tools` names the tools the page has switched off, and the
+proxy re-declares the session without them — a subtraction only, checked against
+the tools this server actually has, so a page can narrow what the model may
+reach for and can never widen it. The connectors are not switched that way: an
+agent that edits files on this machine is turned on against the server, in its
+own panel, for everyone.
 
 Three frames go the other way, authored by the proxy rather than forwarded:
 `proxy.ready` when the handshake is done, `task.update` whenever a dispatched
@@ -73,7 +78,9 @@ Safari and under any CSP that disallows `data:`.
 
 The log is one record per call under `vibey.history.v1`; memory is a list of
 lines under `vibey.memory.v1`. Neither is uploaded — the proxy holds no copy of
-either.
+either. The tool switches are a third, `vibey.tools.v1`, holding the names that
+are switched *off* — so a tool nobody has touched is on, and one the server
+gains later arrives on rather than quietly missing.
 
 The last 40 conversations are kept, and the oldest are shed to stay inside a
 300 KB budget, since that space belongs to the whole origin. Private-mode Safari
@@ -177,6 +184,7 @@ src/
     tasks.js            What the agents are working on, mirrored in the page
     history.js          Past conversations in localStorage, and picking one up
     memory.js           What it remembers between calls, in localStorage
+    tools.js            Which of the server's tools this browser switched off
     star/               Geometry and animation. Knows nothing about transports
       index.js            The controller, the throw, and the per-frame loop
       geometry.js         The star profile, the shell, the core and the glow
@@ -197,6 +205,7 @@ src/
       hud.js              Status chip, transcript, caption, tool label
       history.js          The log panel behind `log`, and its `continue`
       memory.js           The memory panel behind the `memory` button
+      tools.js            The tool switches behind the `tools` button
       connectors.js       Agent setup and the work, behind the `connectors` button
       controls.js         Mic (tap mutes, hold hangs up), field, send, pickers
       viewport.js         Keeps the composer above the on-screen keyboard
@@ -208,6 +217,7 @@ src/
     app.js              Middleware chain + the upgrade handler
     api.js              /api/config, /api/connectors, /api/tasks
     realtime.js         The socket proxy, and the allowlist
+    tools.js            What the page may switch off, and what that leaves
     persona.js          Who Star is, and the session config
     config.js           The environment, resolved once
     static.js           Hosting for dist/ — production only
@@ -247,9 +257,9 @@ push the star into the middle distance.
 
 ## The transport seam
 
-`session/index.js` exposes `on`, `start`, `stop`, `send`, `cancel`, `syncMemory`,
-`messages`, `context`, `connected`, `busy`, `stale`, `state`, `muted`, `model`,
-`voice` — and emits:
+`session/index.js` exposes `on`, `start`, `stop`, `send`, `cancel`,
+`syncMemory`, `syncTools`, `messages`, `context`, `connected`, `busy`, `stale`,
+`state`, `muted`, `model`, `voice` — and emits:
 
 ```
 'state'        listening | thinking | speaking | idle
