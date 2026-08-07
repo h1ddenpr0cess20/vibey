@@ -59,7 +59,8 @@ there lands in the same entry rather than a new one.
 | `npm run lint` | ESLint |
 
 CI runs the lint, the tests on Node 22.12 and 24, and a build that then has to
-boot and serve itself over both HTTP and HTTPS.
+boot and serve itself over both HTTP and HTTPS. CodeQL scans the same source on
+every push and again weekly, since its queries change faster than this does.
 
 The coding agents are all off until you switch one on in the **connectors**
 panel, because they edit files on the machine the server is running on. Vibey

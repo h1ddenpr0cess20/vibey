@@ -229,7 +229,7 @@ src/
       settings.js         The setup the panel edits, validated and saved
 docs/                   These notes, configuration, connectors, policies, screenshots
 test/                   node:test, against a stub xAI socket
-.github/workflows/      CI (lint, tests, build smoke test) and the Docker publish
+.github/workflows/      CI (lint, tests, build smoke test), CodeQL, Docker publish
 ```
 
 `src/client/star/` is the single-file prototype at `prototype/slime-star.html`
