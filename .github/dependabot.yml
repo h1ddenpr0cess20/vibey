@@ -17,7 +17,7 @@ updates:
           - patch
     # Majors stay ungrouped so each one gets its own PR and its own CI run.
 
-  # GitHub Actions used by ci.yml and docker.yml
+  # GitHub Actions used by ci.yml, codeql.yml and docker.yml
   - package-ecosystem: github-actions
     directory: /
     schedule:
