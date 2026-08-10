@@ -1,7 +1,7 @@
 # Build the client, then serve dist/ from the same Node process that fronts the
 # API — the path `npm start` takes, minus the .env file.
 
-FROM node:25-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -11,7 +11,7 @@ COPY . .
 RUN npm run build
 
 
-FROM node:25-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5173
