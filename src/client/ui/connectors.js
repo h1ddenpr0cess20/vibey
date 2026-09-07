@@ -33,7 +33,7 @@ function elapsed(task, now = Date.now()) {
  * conversation, where it gets read back to you first. The only thing this does
  * to a task is stop it.
  */
-export function createConnectorsPanel({ root = document, board, onAgents } = {}) {
+export function createConnectorsPanel({ root = document, board, onAgents, onBusy } = {}) {
   const panelEl = root.querySelector('#connectors');
   const setupEl = root.querySelector('#connectors-setup');
   const listEl = root.querySelector('#connectors-list');
@@ -311,6 +311,7 @@ export function createConnectorsPanel({ root = document, board, onAgents } = {})
     const running = board.running;
     toggleEl.textContent = running ? `connectors ${running}` : 'connectors';
     toggleEl.classList.toggle('live', running > 0);
+    onBusy?.(running);
 
     clearInterval(ticking);
     ticking = running && !panelEl.hidden ? setInterval(tick, 1000) : 0;

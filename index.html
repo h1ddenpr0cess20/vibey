@@ -14,16 +14,20 @@
 <div id="status" class="chip" data-state="idle">idle</div>
 <div id="tool" class="chip"></div>
 
-<div id="tabs">
-  <button id="toolbox-toggle" class="chip" type="button" aria-expanded="false"
-          aria-controls="toolbox">tools</button>
-  <button id="connectors-toggle" class="chip" type="button" aria-expanded="false"
-          aria-controls="connectors">connectors</button>
-  <button id="memory-toggle" class="chip" type="button" aria-expanded="false"
-          aria-controls="memory">memory</button>
-  <button id="history-toggle" class="chip" type="button" aria-expanded="false"
-          aria-controls="history">log</button>
-</div>
+<nav id="menu" aria-label="Panels">
+  <button id="menu-toggle" class="chip" type="button" aria-expanded="false"
+          aria-controls="menu-items">menu</button>
+  <div id="menu-items" hidden>
+    <button id="toolbox-toggle" class="chip" type="button" aria-expanded="false"
+            aria-controls="toolbox">tools</button>
+    <button id="connectors-toggle" class="chip" type="button" aria-expanded="false"
+            aria-controls="connectors">connectors</button>
+    <button id="memory-toggle" class="chip" type="button" aria-expanded="false"
+            aria-controls="memory">memory</button>
+    <button id="history-toggle" class="chip" type="button" aria-expanded="false"
+            aria-controls="history">log</button>
+  </div>
+</nav>
 
 <div id="hud">
   <div id="you"></div>
@@ -89,7 +93,7 @@
     <button id="toolbox-close" class="chip" type="button" aria-label="Close tools">close</button>
   </header>
   <ul id="toolbox-list"></ul>
-  <p id="toolbox-note" class="chip">Memory and the connectors have switches of their own, in their own tabs.</p>
+  <p id="toolbox-note" class="chip">Memory and the connectors have switches of their own, in their own panels.</p>
 </section>
 
 <section id="memory" hidden aria-label="What it remembers">

@@ -14,7 +14,7 @@ task up, dispatches it to **Claude Code**, **Codex**, **OpenCode** or **Grok
 Build** running on this machine, and tells you when it lands — while the call
 carries on.
 
-![Star mid-sentence, with a dispatch to Claude Code just read back](docs/screenshots/desktop.png)
+![Star at rest in a desktop browser, with the menu open](docs/screenshots/desktop.png)
 
 <p align="center">
   <img src="docs/screenshots/mobile.png" alt="Vibey on a phone" width="300">
@@ -36,6 +36,10 @@ leaves the answer playing, and the conversation is still there when you turn it
 back on. It also switches itself off after a minute of silence, and the call
 survives that too. Holding the mic down is the hang-up — a ring closes around it
 while you hold, and the call ends when it lands.
+
+`menu`, in the top corner, is where the panels live: `tools`, `connectors`,
+`memory` and the log, one row each. Picking a row closes the menu behind it,
+and work still running says so on the button while the menu is shut.
 
 `tools` has a switch for each tool Star can reach for — web search, X search,
 the code interpreter, and any MCP server the environment gave it. Switching one
