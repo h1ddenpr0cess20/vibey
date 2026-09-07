@@ -14,7 +14,7 @@ task up, dispatches it to **Claude Code**, **Codex**, **OpenCode** or **Grok
 Build** running on this machine, and tells you when it lands — while the call
 carries on.
 
-![Star mid-sentence, with a dispatch to Claude Code just read back](docs/screenshots/desktop.png)
+![Star at rest in a desktop browser, with the menu open](docs/screenshots/desktop.png)
 
 <p align="center">
   <img src="docs/screenshots/mobile.png" alt="Vibey on a phone" width="300">
