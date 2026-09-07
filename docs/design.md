@@ -203,10 +203,11 @@ src/
       constants.js        The wire format, shared with the server
     ui/
       hud.js              Status chip, transcript, caption, tool label
-      history.js          The log panel behind `log`, and its `continue`
-      memory.js           The memory panel behind the `memory` button
-      tools.js            The tool switches behind the `tools` button
-      connectors.js       Agent setup and the work, behind the `connectors` button
+      menu.js             The corner menu, and the list of panels it drops
+      history.js          The log panel behind `log` in the menu, and its `continue`
+      memory.js           The memory panel behind `memory` in the menu
+      tools.js            The tool switches behind `tools` in the menu
+      connectors.js       Agent setup and the work, behind `connectors` in the menu
       controls.js         Mic (tap mutes, hold hangs up), field, send, pickers
       viewport.js         Keeps the composer above the on-screen keyboard
       stage.js            Strips the starter component's own chrome
