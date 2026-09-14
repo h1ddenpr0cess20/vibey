@@ -18,14 +18,14 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "three": "^0.185.1",
+    "three": "^0.186.0",
     "ws": "^8.21.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
-    "eslint": "^10.9.1",
+    "eslint": "^10.10.0",
     "globals": "^17.12.0",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   }
 }
