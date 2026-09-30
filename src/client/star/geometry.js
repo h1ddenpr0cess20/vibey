@@ -68,13 +68,13 @@ export const toStar = (nx, ny, nz, out) => {
  * Summed, they read as smooth organic swell — and because each is a function
  * of the direction alone, the seam and the poles come out continuous.
  */
-export function createLobes(THREE) {
+export function createLobes(GFX) {
   const lobes = [];
   for (let i = 0; i < 5; i++) {
     const a = i * 2.399963, y = 1 - 2 * (i + 0.5) / 5;
     const r = Math.sqrt(1 - y * y);
     lobes.push({
-      dir: new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r).normalize(),
+      dir: new GFX.Vector3(Math.cos(a) * r, y, Math.sin(a) * r).normalize(),
       freq: 1.0 + i * 0.42,
       speed: 0.45 + i * 0.19,
       amp: 0.115 / (1 + i * 0.6),
@@ -84,21 +84,21 @@ export function createLobes(THREE) {
   return lobes;
 }
 
-export function buildStar(THREE) {
-  const group = new THREE.Group();
+export function buildStar(GFX) {
+  const group = new GFX.Group();
   group.name = 'star_character';
 
   // The body squashes and spins; the halos hang off `group` so a squash never
   // stretches a sprite that is meant to read as light in the air.
-  const body = new THREE.Group();
+  const body = new GFX.Group();
   body.name = 'body';
   group.add(body);
 
-  const v = new THREE.Vector3();
+  const v = new GFX.Vector3();
 
-  const shellMat = new THREE.MeshPhysicalMaterial({
+  const shellMat = new GFX.MeshPhysicalMaterial({
     name: 'slime_shell',
-    color: new THREE.Color('#ffb03a'),
+    color: new GFX.Color('#ffb03a'),
     transparent: true,
     opacity: 0.78,
     transmission: 0.9,
@@ -111,13 +111,13 @@ export function buildStar(THREE) {
     iridescence: 0.35,
     iridescenceIOR: 1.35,
     attenuationDistance: 2.4,
-    attenuationColor: new THREE.Color('#ffd8a1'),
+    attenuationColor: new GFX.Color('#ffd8a1'),
     sheen: 0.5,
     sheenRoughness: 0.5,
-    sheenColor: new THREE.Color('#ffffff'),
+    sheenColor: new GFX.Color('#ffffff'),
   });
 
-  const shellGeo = new THREE.SphereGeometry(1, 144, 88);
+  const shellGeo = new GFX.SphereGeometry(1, 144, 88);
   const shellDirs = shellGeo.attributes.position.array.slice();
   const shellBase = new Float32Array(shellDirs.length);
   for (let i = 0; i < shellDirs.length; i += 3) {
@@ -130,20 +130,20 @@ export function buildStar(THREE) {
 
   // The shell is rewritten every frame and the bounds are never recomputed, so
   // they are set once with enough room for the widest wobble. Left to itself
-  // three.js would cache the undeformed hull and start missing the tips on a
+  // GFX would cache the undeformed hull and start missing the tips on a
   // raycast the moment the goo swelled past it.
-  shellGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1.45);
-  shellGeo.boundingBox = new THREE.Box3(
-    new THREE.Vector3(-1.45, -1.45, -1.45), new THREE.Vector3(1.45, 1.45, 1.45));
+  shellGeo.boundingSphere = new GFX.Sphere(new GFX.Vector3(), 1.45);
+  shellGeo.boundingBox = new GFX.Box3(
+    new GFX.Vector3(-1.45, -1.45, -1.45), new GFX.Vector3(1.45, 1.45, 1.45));
 
-  const shell = new THREE.Mesh(shellGeo, shellMat);
+  const shell = new GFX.Mesh(shellGeo, shellMat);
   shell.name = 'shell';
   body.add(shell);
 
-  const coreMat = new THREE.MeshStandardMaterial({
+  const coreMat = new GFX.MeshStandardMaterial({
     name: 'slime_core',
-    color: new THREE.Color('#3a1405'),
-    emissive: new THREE.Color('#ffa62b'),
+    color: new GFX.Color('#3a1405'),
+    emissive: new GFX.Color('#ffa62b'),
     emissiveIntensity: 3.5,
     roughness: 0.35,
     metalness: 0,
@@ -151,7 +151,7 @@ export function buildStar(THREE) {
     opacity: 0.95,
   });
 
-  const coreGeo = new THREE.SphereGeometry(1, 72, 46);
+  const coreGeo = new GFX.SphereGeometry(1, 72, 46);
   const coreDirs = coreGeo.attributes.position.array.slice();
   const coreBase = new Float32Array(coreDirs.length);
   for (let i = 0; i < coreDirs.length; i += 3) {
@@ -162,40 +162,59 @@ export function buildStar(THREE) {
   coreGeo.attributes.position.needsUpdate = true;
   coreGeo.computeVertexNormals();
 
-  const core = new THREE.Mesh(coreGeo, coreMat);
+  const core = new GFX.Mesh(coreGeo, coreMat);
   core.name = 'core';
   body.add(core);
 
   // The rim bloom shares the shell's geometry rather than owning a second
   // body, so it deforms with it for free and can never drift out of register.
-  const glowMat = new THREE.ShaderMaterial({
+  const glowMat = new GFX.ShaderMaterial({
     name: 'slime_glow',
-    uniforms: { uColor: { value: new THREE.Color('#ffa62b') }, uStrength: { value: 0.5 } },
-    vertexShader: `
-      varying vec3 vN; varying vec3 vP;
-      void main() {
-        vN = normalize(normalMatrix * normal);
-        vec4 mv = modelViewMatrix * vec4(position * 1.06, 1.0);
-        vP = mv.xyz;
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: `
-      uniform vec3 uColor; uniform float uStrength;
-      varying vec3 vN; varying vec3 vP;
-      void main() {
-        float f = 1.0 - abs(dot(normalize(vN), normalize(-vP)));
-        float rim = pow(f, 1.55) * (1.0 - pow(f, 12.0));
-        float body = pow(f, 0.4) * 0.16;
-        float a = (rim + body) * uStrength;
-        gl_FragColor = vec4(uColor * a * 1.15, a);
+    uniforms: { uColor: { value: new GFX.Color('#ffa62b') }, uStrength: { value: 0.5 } },
+    glsl: {
+      vertex: `
+        varying vec3 vN; varying vec3 vP;
+        void main() {
+          vN = normalize(normalMatrix * normal);
+          vec4 mv = modelViewMatrix * vec4(position * 1.06, 1.0);
+          vP = mv.xyz;
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragment: `
+        uniform vec3 uColor; uniform float uStrength;
+        varying vec3 vN; varying vec3 vP;
+        void main() {
+          float f = 1.0 - abs(dot(normalize(vN), normalize(-vP)));
+          float rim = pow(f, 1.55) * (1.0 - pow(f, 12.0));
+          float body = pow(f, 0.4) * 0.16;
+          float a = (rim + body) * uStrength;
+          gl_FragColor = vec4(uColor * a * 1.15, a);
+        }`,
+    },
+    wgsl: `
+      struct Varyings { @builtin(position) position: vec4f, @location(0) vN: vec3f, @location(1) vP: vec3f };
+      @vertex fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Varyings {
+        var out: Varyings;
+        out.vN = normalize(object.normalMatrix * normal);
+        let mv = object.modelViewMatrix * vec4f(position * 1.06, 1.0);
+        out.vP = mv.xyz;
+        out.position = object.projectionMatrix * mv;
+        return out;
+      }
+      @fragment fn fs(in: Varyings) -> @location(0) vec4f {
+        let f = 1.0 - abs(dot(normalize(in.vN), normalize(-in.vP)));
+        let rim = pow(f, 1.55) * (1.0 - pow(f, 12.0));
+        let body = pow(f, 0.4) * 0.16;
+        let a = (rim + body) * material.uStrength;
+        return vec4f(material.uColor * a * 1.15, a);
       }`,
     transparent: true,
-    blending: THREE.AdditiveBlending,
-    side: THREE.FrontSide,
+    blending: GFX.AdditiveBlending,
+    side: GFX.FrontSide,
     depthWrite: false,
   });
 
-  const glow = new THREE.Mesh(shellGeo, glowMat);
+  const glow = new GFX.Mesh(shellGeo, glowMat);
   glow.name = 'glow';
   body.add(glow);
 
@@ -206,36 +225,36 @@ export function buildStar(THREE) {
     const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
     for (const [at, alpha] of stops) grd.addColorStop(at, `rgba(255,255,255,${alpha})`);
     g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
+    const t = new GFX.CanvasTexture(c);
+    t.colorSpace = GFX.SRGBColorSpace;
     return t;
   };
 
   // Close bloom, depth-tested, so the body sits inside its own light.
-  const haloMat = new THREE.SpriteMaterial({
+  const haloMat = new GFX.SpriteMaterial({
     map: radial([[0, 1], [0.14, 0.55], [0.34, 0.17], [0.66, 0.035], [1, 0]]),
-    color: new THREE.Color('#ffa62b'),
+    color: new GFX.Color('#ffa62b'),
     transparent: true,
-    blending: THREE.AdditiveBlending,
+    blending: GFX.AdditiveBlending,
     depthWrite: false,
     opacity: 0.85,
   });
-  const halo = new THREE.Sprite(haloMat);
+  const halo = new GFX.Sprite(haloMat);
   halo.name = 'halo';
   halo.scale.setScalar(4.4);
   group.add(halo);
 
   // Wide atmospheric wash, depth-untested so it reads as light in the air.
-  const haloWideMat = new THREE.SpriteMaterial({
+  const haloWideMat = new GFX.SpriteMaterial({
     map: radial([[0, 0.42], [0.3, 0.16], [0.6, 0.05], [1, 0]]),
-    color: new THREE.Color('#ff7a2f'),
+    color: new GFX.Color('#ff7a2f'),
     transparent: true,
-    blending: THREE.AdditiveBlending,
+    blending: GFX.AdditiveBlending,
     depthWrite: false,
     depthTest: false,
     opacity: 0.3,
   });
-  const haloWide = new THREE.Sprite(haloWideMat);
+  const haloWide = new GFX.Sprite(haloWideMat);
   haloWide.name = 'halo_wide';
   haloWide.scale.setScalar(9);
   haloWide.renderOrder = -1;

@@ -210,9 +210,8 @@ src/
       connectors.js       Agent setup and the work, behind `connectors` in the menu
       controls.js         Mic (tap mutes, hold hangs up), field, send, pickers
       viewport.js         Keeps the composer above the on-screen keyboard
-      stage.js            Strips the starter component's own chrome
     vendor/
-      three-d-stage.js    Starter component (renderer, lighting, camera, controls)
+      gfx/                The 3D engine: <three-d-stage>, WebGPU, else WebGL 2
   server/
     index.js            Entry point
     app.js              Middleware chain + the upgrade handler
@@ -241,18 +240,24 @@ hop, throw, pick-up), and the `stalled` mood.
 
 Two things the shell needs that a static prototype didn't. Its bounding volumes
 are set once, by hand, wide enough for the fattest wobble — the positions are
-rewritten every frame and the bounds are never recomputed, so left alone three.js
+rewritten every frame and the bounds are never recomputed, so left alone the engine
 would cache the undeformed hull and start missing the tips on a raycast. And the
 halo sprites hang off the outer group rather than the body, so a squash lands on
 the goo without stretching light that is meant to be in the air.
 
-`src/client/vendor/three-d-stage.js` is a copied starter component with two local
-changes, listed at the top of the file — re-copying it drops them.
+`src/client/vendor/gfx/` is the 3D engine, written for these characters rather
+than pulled in: `<three-d-stage>` (studio lighting, ground shadow, orbit
+controls, framing, resize), the scene API the rig is built from — handed over as
+`GFX` — and the same shading in WGSL for WebGPU and GLSL for WebGL 2. WebGPU is
+tried first, WebGL 2 takes over where it is missing or its device is lost, and
+`?renderer=webgl` pins the fallback. The scene was first written against
+three.js r186, and the engine follows its maths closely enough to draw the same
+picture; `vendor/gfx/LICENSE` says which parts are ported.
 
 The camera is the other thing the split changed. The framing is measured against
 everything the star can do, hop included, rather than where it happens to be
-sitting, and it refits on resize — which the starter component's one-shot
-vertical framing doesn't do. It has to be measured rather than auto-fitted
+sitting, and it refits on resize — which the stage's own one-shot framing
+doesn't do. It has to be measured rather than auto-fitted
 anyway, because the wide halo sprite is nine units across and would otherwise
 push the star into the middle distance.
 

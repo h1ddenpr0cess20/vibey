@@ -1,21 +1,20 @@
-export function createGrab({ stage, THREE, mesh, at, onGrab, onDrag, onDrop, inset = 0.6 }) {
-  const canvas = stage._renderer.domElement;
+export function createGrab({ stage, GFX, mesh, at, onGrab, onDrag, onDrop, inset = 0.6 }) {
   const camera = stage._camera;
 
-  const ray = new THREE.Raycaster();
-  const ndc = new THREE.Vector2();
-  const plane = new THREE.Plane();
-  const hit = new THREE.Vector3();
-  const offset = new THREE.Vector3();
-  const forward = new THREE.Vector3();
-  const local = new THREE.Vector3();
-  const before = new THREE.Vector3();
+  const ray = new GFX.Raycaster();
+  const ndc = new GFX.Vector2();
+  const plane = new GFX.Plane();
+  const hit = new GFX.Vector3();
+  const offset = new GFX.Vector3();
+  const forward = new GFX.Vector3();
+  const local = new GFX.Vector3();
+  const before = new GFX.Vector3();
 
   let id = null;
   let last = 0;
 
   const aim = (e) => {
-    const r = canvas.getBoundingClientRect();
+    const r = stage._renderer.domElement.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
   };

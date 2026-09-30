@@ -13,17 +13,17 @@ function spring(s, k, c, dt, to = 0) {
 const MARGIN = 1.22;
 const SWELL = 1.12;
 
-export function createStar({ stage, THREE }) {
-  buildEnvironment({ stage, THREE });
+export function createStar({ stage, GFX }) {
+  buildEnvironment({ stage, GFX });
 
   const {
     group, body, shell,
     shellGeo, shellMat, shellDirs, shellBase,
     core, coreGeo, coreMat, coreDirs, coreBase,
     glowMat, halo, haloMat, haloWide, haloWideMat,
-  } = buildStar(THREE);
+  } = buildStar(GFX);
 
-  const LOBES = createLobes(THREE);
+  const LOBES = createLobes(GFX);
 
   let state = 'idle';
   let broken = false;
@@ -35,7 +35,7 @@ export function createStar({ stage, THREE }) {
   let energy = 0;
   let lastEnergy = 0;
 
-  const clock = new THREE.Clock();
+  const clock = new GFX.Clock();
   let t = 0;
   let phase = 0;
   let hue = 0;
@@ -58,11 +58,11 @@ export function createStar({ stage, THREE }) {
 
   let dead = 0;
 
-  const v = new THREE.Vector3();
-  const tint = new THREE.Color();
-  const warm = new THREE.Color('#fff2dc');
-  const deadTint = new THREE.Color(DEAD);
-  const palette = PALETTE.map((hex) => new THREE.Color(hex));
+  const v = new GFX.Vector3();
+  const tint = new GFX.Color();
+  const warm = new GFX.Color('#fff2dc');
+  const deadTint = new GFX.Color(DEAD);
+  const palette = PALETTE.map((hex) => new GFX.Color(hex));
 
   const paletteAt = (at, out) => {
     const f = ((at % palette.length) + palette.length) % palette.length;
@@ -270,7 +270,7 @@ export function createStar({ stage, THREE }) {
 
   stage.setObject(group);
 
-  let dir = new THREE.Vector3(0.24, 0.15, 1).normalize();
+  let dir = new GFX.Vector3(0.24, 0.15, 1).normalize();
   stage._controls.addEventListener('start', () => { dir = null; });
 
   /**
@@ -279,24 +279,24 @@ export function createStar({ stage, THREE }) {
    * bottom two only -0.82 — so framing on the origin sits it visibly high. The
    * halos are left out on purpose: they are light, and light may run off frame.
    */
-  const rest = new THREE.Box3().setFromArray(shellBase);
+  const rest = new GFX.Box3().setFromArray(shellBase);
   rest.min.multiplyScalar(SWELL);
   rest.max.multiplyScalar(SWELL);
 
   const corners = [];
   for (let i = 0; i < 8; i++) {
-    corners.push(new THREE.Vector3(
+    corners.push(new GFX.Vector3(
       i & 1 ? rest.max.x : rest.min.x,
       i & 2 ? rest.max.y : rest.min.y,
       i & 4 ? rest.max.z : rest.min.z));
   }
 
-  const focus = new THREE.Vector3();
-  const sphere = new THREE.Sphere();
-  const ndc = new THREE.Vector3();
-  const right = new THREE.Vector3();
-  const up = new THREE.Vector3();
-  const fwd = new THREE.Vector3();
+  const focus = new GFX.Vector3();
+  const sphere = new GFX.Sphere();
+  const ndc = new GFX.Vector3();
+  const right = new GFX.Vector3();
+  const up = new GFX.Vector3();
+  const fwd = new GFX.Vector3();
 
   /**
    * Fit and centre in one pass each: place the camera, project the corners,
@@ -358,7 +358,7 @@ export function createStar({ stage, THREE }) {
   const CARRY = 5;
 
   hand = createGrab({
-    stage, THREE, mesh: shell, inset: 0.85,
+    stage, GFX, mesh: shell, inset: 0.85,
     at: () => v.set(x, y, z),
 
     onGrab() {
