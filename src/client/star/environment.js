@@ -1,4 +1,4 @@
-export function buildEnvironment({ stage, THREE }) {
+export function buildEnvironment({ stage, GFX }) {
   try {
     const c = document.createElement('canvas');
     c.width = 64; c.height = 32;
@@ -17,12 +17,12 @@ export function buildEnvironment({ stage, THREE }) {
     ctx.fillStyle = 'rgba(160,210,255,0.8)';
     ctx.beginPath(); ctx.ellipse(48, 12, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
 
-    const tex = new THREE.Texture(c);
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.colorSpace = THREE.SRGBColorSpace;
+    const tex = new GFX.Texture(c);
+    tex.mapping = GFX.EquirectangularReflectionMapping;
+    tex.colorSpace = GFX.SRGBColorSpace;
     tex.needsUpdate = true;
 
-    const pmrem = new THREE.PMREMGenerator(stage._renderer);
+    const pmrem = new GFX.PMREMGenerator(stage._renderer);
     stage._scene.environment = pmrem.fromEquirectangular(tex).texture;
     pmrem.dispose();
     tex.dispose();

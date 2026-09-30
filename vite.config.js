@@ -51,9 +51,6 @@ export default defineConfig(({ mode }) => {
        *  --host, which is that decision made on purpose. */
       host: env.HOST || false,
     },
-    resolve: {
-      alias: { 'three/addons/': 'three/examples/jsm/' },
-    },
     build: {
       target: 'es2022',
       sourcemap: true,

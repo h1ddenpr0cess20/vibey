@@ -1,5 +1,5 @@
 import './styles.css';
-import './vendor/three-d-stage.js';
+import './vendor/gfx/stage.js';
 
 import { fetchConfig } from './api.js';
 import { createHistory } from './history.js';
@@ -15,14 +15,13 @@ import { createConnectorsPanel } from './ui/connectors.js';
 import { createMenu } from './ui/menu.js';
 import { createToolsPanel } from './ui/tools.js';
 import { createHud } from './ui/hud.js';
-import { stripStageChrome } from './ui/stage.js';
 import { trackKeyboardInset } from './ui/viewport.js';
 
-const stage = stripStageChrome(document.querySelector('three-d-stage'));
+const stage = document.querySelector('three-d-stage');
 
-const { THREE } = await stage.ready;
+const { GFX } = await stage.ready;
 
-const star = createStar({ stage, THREE });
+const star = createStar({ stage, GFX });
 const memory = createMemory();
 const switches = createToolSwitches();
 const session = createVoiceSession({ memory, switches });
