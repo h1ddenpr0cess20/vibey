@@ -188,6 +188,7 @@ src/
     star/               Geometry and animation. Knows nothing about transports
       index.js            The controller, the throw, and the per-frame loop
       geometry.js         The star profile, the shell, the core and the glow
+      glow.*.glsl, .wgsl  The glow's rim shader, for WebGL 2 and WebGPU
       grab.js             The pointer: pick it up, spin it, throw it
       moods.js            Targets per conversational state
       environment.js      Warm studio env map for the transmissive shell
@@ -253,6 +254,8 @@ tried first, WebGL 2 takes over where it is missing or its device is lost, and
 `?renderer=webgl` pins the fallback. The scene was first written against
 three.js r186, and the engine follows its maths closely enough to draw the same
 picture; `vendor/gfx/LICENSE` says which parts are ported.
+The shaders are plain `.glsl` and `.wgsl` files under `vendor/gfx/shaders/`,
+put together per draw by `glsl.js` and `wgsl.js`.
 
 The camera is the other thing the split changed. The framing is measured against
 everything the star can do, hop included, rather than where it happens to be
